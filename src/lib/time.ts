@@ -1,4 +1,4 @@
-import type { Lang, Translate } from '../i18n';
+import type { Lang, Translate } from '../i18n/index';
 
 const locale = (_lang: Lang) => 'en-GB';
 

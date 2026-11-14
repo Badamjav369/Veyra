@@ -25,6 +25,7 @@ class MemStore implements RelayStore {
   inactive = (before: number) => [...this.users].filter(([, u]) => (u.lastSeen ?? u.createdAt) < before).map(([h]) => h);
   backup = (h: string) => this.backups.get(h);
   setBackup = (h: string, r: BackupRecord) => void this.backups.set(h, r);
+  purgeMail = () => {};
 }
 
 function conn(): RelayConn & { inbox: ServerMsg[]; last(): ServerMsg } {

@@ -1,13 +1,14 @@
-import type { ChatState, Contact, CryptoStore, FileInfo, Group, Message, MsgStatus, Profile, Section, SystemEvent, Timer } from '../types';
+import type { ChatState, Contact, CryptoStore, FileInfo, Group, Message, MsgStatus, Profile, ReplyRef, Section, SystemEvent, Timer } from '../types';
 import { TIMER_MS } from '../types';
 
 export type ChatAction =
   | { type: 'section'; section: Section }
   | { type: 'account'; account: NonNullable<ChatState['account']> }
   | { type: 'open'; id: string }
-  | { type: 'send'; convo: string; mid: string; text: string; file?: FileInfo; at: number }
+  | { type: 'send'; convo: string; mid: string; text: string; file?: FileInfo; at: number; reply?: ReplyRef }
+  | { type: 'react'; convo: string; mid: string; who: string; emoji: string }
   | { type: 'status'; mid: string; status: MsgStatus }
-  | { type: 'receive'; convo: string; who: string; mid: string; text: string; at: number; timer: Timer; file?: FileInfo }
+  | { type: 'receive'; convo: string; who: string; mid: string; text: string; at: number; timer: Timer; file?: FileInfo; reply?: ReplyRef }
   | { type: 'receipt'; who: string; mids: string[]; s: 'delivered' | 'read' }
   | { type: 'readSent'; convo: string; ids: number[] }
   | { type: 'typing'; convo: string; who: string; until: number }
@@ -151,9 +152,25 @@ export function chatReducer(s: ChatState, a: ChatAction): ChatState {
         revealed: 0,
         status: 'pending',
         file: a.file,
+        reply: a.reply,
       };
       const directIds = isGroupId(a.convo) ? s.directIds : [contactOf(a.convo), ...s.directIds.filter((x) => x !== contactOf(a.convo))];
       return { ...s, nextId: s.nextId + 1, directIds, threads: { ...s.threads, [a.convo]: [...(s.threads[a.convo] ?? []), m] } };
+    }
+
+    case 'react': {
+      const list = s.threads[a.convo];
+      if (!list) return s;
+      const i = list.findIndex((m) => m.mid === a.mid && m.from !== 'system');
+      if (i < 0) return s;
+      const m = list[i];
+      if ((m.reactions?.[a.who] ?? '') === a.emoji) return s;
+      const reactions = { ...m.reactions };
+      if (a.emoji) reactions[a.who] = a.emoji;
+      else delete reactions[a.who];
+      const next = [...list];
+      next[i] = { ...m, reactions: Object.keys(reactions).length ? reactions : undefined };
+      return { ...s, threads: { ...s.threads, [a.convo]: next } };
     }
 
     case 'status':
@@ -163,7 +180,7 @@ export function chatReducer(s: ChatState, a: ChatAction): ChatState {
 
     case 'receive': {
       if (s.threads[a.convo]?.some((m) => m.mid === a.mid)) return s; // duplicate
-      const m: Message = { id: s.nextId, mid: a.mid, from: 'them', who: a.who, text: a.text, at: a.at, timer: a.timer, revealed: 0, file: a.file };
+      const m: Message = { id: s.nextId, mid: a.mid, from: 'them', who: a.who, text: a.text, at: a.at, timer: a.timer, revealed: 0, file: a.file, reply: a.reply };
       const isActive = current === a.convo;
       const directIds = isGroupId(a.convo) ? s.directIds : [a.who, ...s.directIds.filter((x) => x !== a.who)];
       return {

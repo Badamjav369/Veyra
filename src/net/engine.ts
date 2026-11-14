@@ -22,10 +22,10 @@ import {
   x3dhRespond,
   type InnerEnvelope,
 } from '../../shared/e2ee';
-import type { AppMessage, BackupMeta, PreKeyBundle, ServerMsg, Timer, WireFile, WireGroup } from '../../shared/protocol';
+import type { AppMessage, BackupMeta, PreKeyBundle, ServerMsg, Timer, WireFile, WireGroup, WireReply } from '../../shared/protocol';
 import type { ChatAction } from '../state/chat';
 import { contactOf, isGroupId } from '../state/chat';
-import type { ChatState, Contact, CryptoStore, FileInfo, Group, Session } from '../types';
+import type { ChatState, Contact, CryptoStore, FileInfo, Group, ReplyRef, Session } from '../types';
 import { colorFor } from '../types';
 import { Connection, ServerError, type ConnStatus } from './connection';
 
@@ -54,9 +54,13 @@ export interface OutgoingText {
   at: number;
   timer: Timer;
   file?: FileInfo;
+  reply?: ReplyRef;
 }
 
 const OPK_BATCH = 50;
+
+/** A reaction is one emoji (possibly with modifiers), nothing else. */
+const isEmoji = (v: unknown): v is string => typeof v === 'string' && v.length > 0 && v.length <= 16 && /\p{Extended_Pictographic}/u.test(v) && !/[\p{L}\p{N}]/u.test(v.replace(/[\u{1F1E6}-\u{1F1FF}]/gu, ''));
 
 export class Engine {
   private conn: Connection;
@@ -280,12 +284,13 @@ export class Engine {
     this.inFlight.add(m.mid);
     const g = isGroupId(convo) ? convo : undefined;
     const file: WireFile | undefined = m.file?.dataUrl ? { name: m.file.name, size: m.file.size, type: m.file.type, checksum: m.file.checksum, data: m.file.dataUrl } : undefined;
+    const re: WireReply | undefined = m.reply ? { ...m.reply, who: m.reply.who === 'me' ? this.me.handle : m.reply.who } : undefined;
     return this.serial(async () => {
       try {
         let failed = false;
         for (const h of this.recipients(convo)) {
           try {
-            await this.sendTo(h, { k: 'text', mid: m.mid, text: m.text, at: m.at, timer: m.timer, file, g });
+            await this.sendTo(h, { k: 'text', mid: m.mid, text: m.text, at: m.at, timer: m.timer, file, g, re });
           } catch (err) {
             if (err instanceof ServerError && (err.code === 'offline' || err.code === 'timeout')) throw err;
             failed = true; // e.g. that person deleted their account
@@ -323,6 +328,11 @@ export class Engine {
 
   sendReceipts(byPerson: Record<string, string[]>, s: 'delivered' | 'read') {
     for (const [h, mids] of Object.entries(byPerson)) if (mids.length) void this.control([h], { k: 'receipt', mids, s });
+  }
+
+  /** Adds, changes or (with '') removes your reaction to a message. */
+  sendReaction(convo: string, mid: string, emoji: string) {
+    void this.control(this.recipients(convo), { k: 'react', mid, emoji, g: isGroupId(convo) ? convo : undefined });
   }
 
   sendTimer(convo: string, timer: Timer) {
@@ -381,7 +391,7 @@ export class Engine {
     for (const [convo, list] of Object.entries(s.threads)) {
       for (const m of list) {
         if (m.from === 'me' && m.status === 'pending' && m.mid) {
-          void this.sendText(convo, { mid: m.mid, text: m.text, at: m.at, timer: m.timer ?? 'off', file: m.file });
+          void this.sendText(convo, { mid: m.mid, text: m.text, at: m.at, timer: m.timer ?? 'off', file: m.file, reply: m.reply });
         }
       }
     }
@@ -497,9 +507,24 @@ export class Engine {
         const file: FileInfo | undefined = app.file
           ? { name: String(app.file.name).slice(0, 200), size: Number(app.file.size) || 0, type: String(app.file.type), checksum: String(app.file.checksum), dataUrl: String(app.file.data) }
           : undefined;
-        this.d.dispatch({ type: 'receive', convo, who: from, mid: app.mid, text: String(app.text ?? '').slice(0, 20_000), at: Math.min(app.at, ts, now), timer: app.timer ?? 'off', file });
+        const re = app.re;
+        const reply: ReplyRef | undefined =
+          re && typeof re.mid === 'string' && typeof re.who === 'string'
+            ? {
+                mid: re.mid.slice(0, 64),
+                who: re.who === s.profile.handle ? 'me' : re.who.slice(0, 24),
+                text: String(re.text ?? '').slice(0, 200),
+                file: re.file ? String(re.file).slice(0, 200) : undefined,
+              }
+            : undefined;
+        this.d.dispatch({ type: 'receive', convo, who: from, mid: app.mid, text: String(app.text ?? '').slice(0, 20_000), at: Math.min(app.at, ts, now), timer: app.timer ?? 'off', file, reply });
         void this.control([from], { k: 'receipt', mids: [app.mid], s: 'delivered' });
         return;
+      }
+      case 'react': {
+        if (app.g && !s.groups.some((g) => g.id === app.g)) return;
+        if (typeof app.mid !== 'string' || (app.emoji !== '' && !isEmoji(app.emoji))) return;
+        return this.d.dispatch({ type: 'react', convo: app.g ?? `d:${from}`, mid: app.mid, who: from, emoji: app.emoji });
       }
       case 'receipt':
         return this.d.dispatch({ type: 'receipt', who: from, mids: app.mids, s: app.s });

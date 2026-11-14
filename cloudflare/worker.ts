@@ -1,4 +1,4 @@
-// SHIVNEE on Cloudflare.
+// Veyra on Cloudflare.
 //
 //   • The web app (./dist) is served as static assets.
 //   • /ws and /health go to ONE Durable Object ("Relay") that holds every WebSocket and stores
@@ -11,15 +11,13 @@
 import { DurableObject } from 'cloudflare:workers';
 import { b64, randomBytes, randomId } from '../shared/encoding';
 import type { OneTimePreKeyPublic, ServerMsg, SignedPreKeyPublic } from '../shared/protocol';
-import { handleFrame, purgeInactive, type BackupRecord, type Envelope, type RelayConn, type RelayHub, type RelayStore, type UserRecord } from '../server/relay';
+import { handleFrame, maintain, MAINTENANCE_EVERY, type BackupRecord, type Envelope, type RelayConn, type RelayHub, type RelayStore, type UserRecord } from '../server/relay';
 
 export interface Env {
   RELAY: DurableObjectNamespace<Relay>;
   ASSETS: Fetcher;
   ADMIN_TOKEN?: string; // secret; enables POST /admin/reset
 }
-
-const MAIL_TTL = 30 * 24 * 60 * 60 * 1000;
 
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
@@ -51,25 +49,18 @@ export class Relay extends DurableObject<Env> {
     this.store = this.makeStore();
     this.hub = this.makeHub();
     void ctx.storage.getAlarm().then(async (a) => {
-      if (a === null) await ctx.storage.setAlarm(Date.now() + 60 * 60 * 1000);
+      if (a === null) await ctx.storage.setAlarm(Date.now() + MAINTENANCE_EVERY);
     });
   }
 
   private createSchema() {
     this.sql.exec(`
-      CREATE TABLE IF NOT EXISTS users (handle TEXT PRIMARY KEY, ik TEXT NOT NULL, ik_dh TEXT NOT NULL, ik_dh_sig TEXT NOT NULL, spk TEXT NOT NULL, created_at INTEGER NOT NULL);
+      CREATE TABLE IF NOT EXISTS users (handle TEXT PRIMARY KEY, ik TEXT NOT NULL, ik_dh TEXT NOT NULL, ik_dh_sig TEXT NOT NULL, spk TEXT NOT NULL, created_at INTEGER NOT NULL, last_seen INTEGER);
       CREATE TABLE IF NOT EXISTS opks (handle TEXT NOT NULL, id INTEGER NOT NULL, pub TEXT NOT NULL, PRIMARY KEY (handle, id));
       CREATE TABLE IF NOT EXISTS mail (id TEXT PRIMARY KEY, handle TEXT NOT NULL, ts INTEGER NOT NULL, body TEXT NOT NULL);
       CREATE INDEX IF NOT EXISTS mail_by_handle ON mail (handle, ts);
-      CREATE TABLE IF NOT EXISTS backups (handle TEXT PRIMARY KEY, auth_hash TEXT NOT NULL, blob TEXT NOT NULL, rev INTEGER NOT NULL, device TEXT NOT NULL, at INTEGER NOT NULL, fails INTEGER NOT NULL, fail_since INTEGER NOT NULL);
+      CREATE TABLE IF NOT EXISTS backups (handle TEXT PRIMARY KEY, auth_hash TEXT NOT NULL, blob TEXT NOT NULL, rev INTEGER NOT NULL, device TEXT NOT NULL, at INTEGER NOT NULL, fails INTEGER NOT NULL, fail_since INTEGER NOT NULL, wrap TEXT, rc_hash TEXT, rc_wrap TEXT);
     `);
-    for (const [table, col] of [['backups', 'wrap'], ['backups', 'rc_hash'], ['backups', 'rc_wrap'], ['users', 'last_seen']]) {
-      try {
-        this.sql.exec(`ALTER TABLE ${table} ADD COLUMN ${col} ${col === 'last_seen' ? 'INTEGER' : 'TEXT'}`); // added after v1; fails once it exists
-      } catch {
-        /* already there */
-      }
-    }
   }
 
   async fetch(request: Request): Promise<Response> {
@@ -115,15 +106,14 @@ export class Relay extends DurableObject<Env> {
     for (const ws of this.ctx.getWebSockets()) ws.close(4001, 'reset');
     await this.ctx.storage.deleteAll();
     this.createSchema();
-    await this.ctx.storage.setAlarm(Date.now() + 60 * 60 * 1000);
+    await this.ctx.storage.setAlarm(Date.now() + MAINTENANCE_EVERY);
     console.log('database reset');
     return Response.json({ ok: true, reset: true });
   }
 
   async alarm() {
-    this.sql.exec('DELETE FROM mail WHERE ts < ?', Date.now() - MAIL_TTL);
-    purgeInactive(this.store, (s) => console.log(s));
-    await this.ctx.storage.setAlarm(Date.now() + 60 * 60 * 1000);
+    maintain(this.store, (s) => console.log(s));
+    await this.ctx.storage.setAlarm(Date.now() + MAINTENANCE_EVERY);
   }
 
   /* --------------------------------------------------------- adapters */
@@ -221,6 +211,9 @@ export class Relay extends DurableObject<Env> {
       },
       mailbox(handle) {
         return sql.exec<{ id: string; ts: number; body: string }>('SELECT id, ts, body FROM mail WHERE handle = ? ORDER BY ts', handle).toArray();
+      },
+      purgeMail(before) {
+        sql.exec('DELETE FROM mail WHERE ts < ?', before);
       },
       ack(handle, ids) {
         for (const id of ids) sql.exec('DELETE FROM mail WHERE handle = ? AND id = ?', handle, id);

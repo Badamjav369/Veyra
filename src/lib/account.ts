@@ -15,11 +15,8 @@ import {
   newRecoveryCode,
   recoveryKeys,
   deviceId,
-  eraseLegacyVault,
-  hasLegacyVault,
   hasLocal,
   openData,
-  openLegacyVault,
   openLocal,
   rememberAccount,
   saveVault,
@@ -52,8 +49,8 @@ export class SignInFailure extends Error {
 export interface SignedIn {
   session: VaultSession;
   state: ChatState;
-  /** Where the data came from: this device, the server backup, or a pre-sign-in vault. */
-  source: 'device' | 'server' | 'legacy';
+  /** Where the data came from: this device or the server backup. */
+  source: 'device' | 'server';
   offline: boolean;
 }
 
@@ -154,20 +151,6 @@ export async function signIn(server: string, handle: string, password: string, o
     case 'timeout':
       if (local) return done(local.data, local.syncedRev, 'device'); // offline, or the server was reset (the app re-registers)
       if (localWrong) throw new SignInFailure('wrong');
-      // A vault from before sign-in existed: same browser, same passphrase.
-      if (hasLegacyVault()) {
-        try {
-          const old = await openLegacyVault<ChatState>(password);
-          if (old.profile?.handle === handle) {
-            const r = await done(old, 0, 'legacy');
-            eraseLegacyVault();
-            return r;
-          }
-        } catch (err) {
-          if (err instanceof SignInFailure) throw err;
-          /* not this one */
-        }
-      }
       if (remoteError === 'not_found') throw new SignInFailure('noAccount');
       if (remoteError === 'no_backup') throw new SignInFailure('noBackup');
       throw new SignInFailure('unreachable');

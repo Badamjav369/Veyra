@@ -1,4 +1,4 @@
-// SHIVNEE end-to-end encryption, modelled on the Signal protocol:
+// Veyra end-to-end encryption, modelled on the Signal protocol:
 //   • X3DH         — two people agree on a shared secret using only each other's PUBLIC keys
 //   • Double Ratchet — every message gets a fresh key; old keys are thrown away
 //   • Sealed sender — the server can't see who sent a message, only who receives it
@@ -129,7 +129,7 @@ export interface X3dhHeader {
 }
 
 function x3dhKdf(material: Bytes): Bytes {
-  return hkdf(sha256, concat(FF32, material), ZERO32, utf8('SHIVNEE-X3DH-v1'), 32);
+  return hkdf(sha256, concat(FF32, material), ZERO32, utf8('Veyra-X3DH-v1'), 32);
 }
 
 /** Alice starts a conversation using Bob's published bundle. */
@@ -185,7 +185,7 @@ export interface RatchetHeader {
 const MAX_SKIP = 1000;
 
 function kdfRK(rk: Bytes, dhOut: Bytes): [Bytes, Bytes] {
-  const out = hkdf(sha256, dhOut, rk, utf8('SHIVNEE-RK'), 64);
+  const out = hkdf(sha256, dhOut, rk, utf8('Veyra-RK'), 64);
   return [out.slice(0, 32), out.slice(32)];
 }
 
@@ -194,7 +194,7 @@ function kdfCK(ck: Bytes): [Bytes, Bytes] {
 }
 
 function aead(mk: Bytes, ad: Bytes) {
-  const k = hkdf(sha256, mk, ZERO32, utf8('SHIVNEE-MSG'), 44);
+  const k = hkdf(sha256, mk, ZERO32, utf8('Veyra-MSG'), 44);
   return gcm(k.slice(0, 32), k.slice(32, 44), ad);
 }
 
@@ -276,7 +276,7 @@ export function ratchetDecrypt(state: RatchetState, header: RatchetHeader, ct: s
  */
 export function seal(recipientIkDh: string, payload: Bytes): string {
   const e = generateDH();
-  const k = hkdf(sha256, dh(e.priv, recipientIkDh), concat(unb64(e.pub), unb64(recipientIkDh)), utf8('SHIVNEE-SEAL'), 44);
+  const k = hkdf(sha256, dh(e.priv, recipientIkDh), concat(unb64(e.pub), unb64(recipientIkDh)), utf8('Veyra-SEAL'), 44);
   const ct = gcm(k.slice(0, 32), k.slice(32, 44)).encrypt(payload);
   return b64(concat(unb64(e.pub), ct));
 }
@@ -284,7 +284,7 @@ export function seal(recipientIkDh: string, payload: Bytes): string {
 export function unseal(me: KeyPair, sealed: string): Bytes {
   const raw = unb64(sealed);
   const ePub = b64(raw.subarray(0, 32));
-  const k = hkdf(sha256, dh(me.priv, ePub), concat(raw.subarray(0, 32), unb64(me.pub)), utf8('SHIVNEE-SEAL'), 44);
+  const k = hkdf(sha256, dh(me.priv, ePub), concat(raw.subarray(0, 32), unb64(me.pub)), utf8('Veyra-SEAL'), 44);
   return gcm(k.slice(0, 32), k.slice(32, 44)).decrypt(raw.subarray(32));
 }
 

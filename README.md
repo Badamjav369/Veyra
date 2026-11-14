@@ -1,99 +1,67 @@
-# Veyra — quiet, end-to-end encrypted chat
+# Veyra
 
-A soft, dark messenger with **direct** and **group** chats, an **English / Монгол** switch, and a
-small relay server that never sees what you write — or who wrote it.
+End-to-end encrypted chat: a React web app plus a small relay that stores only public keys and
+sealed envelopes. The relay never sees message content or who sent a message.
 
-**How the encryption works, step by step (in Mongolian):** [docs/HOW-IT-WORKS.md](docs/HOW-IT-WORKS.md)
+Runs on **Cloudflare Workers** (static app + one Durable Object), or on Node for local development.
 
-## Run it
+## Quick start
 
-You need [Node.js](https://nodejs.org) **20.19+**.
+Requires Node.js 20.19+.
 
 ```bash
 npm install
-npm run dev
+npm run dev        # relay on :8788, web app on http://localhost:5273
 ```
 
-This starts the relay on <http://localhost:8787> and the web app on <http://localhost:5173>.
-To try it with two people, open a normal window and an **incognito** window, create two identities,
-and add each other by handle.
+To test with two people, use a normal window and an incognito window and create two accounts.
 
-| Command | What it does |
+| Command | Purpose |
 | --- | --- |
-| `npm run dev` | Relay server + web app with hot reload |
-| `npm run server` | Relay server only (port 8787, `PORT=` to change) |
-| `npm run dev:client` | Web app only |
-| `npm start` | Build the web app and serve everything from the relay on port 8787 |
-| `npm test` | Protocol tests (key agreement, ratchet, tampering, sealed sender…) and sign-in/backup tests |
-| `npm run build` | Type-check client + server + Worker and build `dist/` |
-| `npm run cf:dev` | Run the Cloudflare version locally (Worker + Durable Object) |
-| `npm run deploy` | Build and deploy to Cloudflare — see [docs/DEPLOY.md](docs/DEPLOY.md) |
+| `npm run dev` | Relay + web app with hot reload |
+| `npm test` | Crypto protocol and sign-in/backup tests |
+| `npm run build` | Type-check everything and build `dist/` |
+| `npm run db:reset` | Local only: stop the relay first, then wipe `server/data` and create a test account (`-- <handle> <password>`) |
+| `npm run cf:dev` | Run the Cloudflare version locally |
+| `npm run deploy` | Build and deploy to Cloudflare |
 
-Server data (public keys + sealed envelopes waiting for delivery) lives in `server/data/store.json`
-for the Node relay, or in the Durable Object's SQLite database on Cloudflare.
+## Deploy
 
-## Deploy to Cloudflare
+Pushing to `main` deploys automatically through Cloudflare Workers Builds
+(build: `npm run build`, deploy: `npx wrangler deploy`). Setup, the `ADMIN_TOKEN` secret and
+database reset are covered in [docs/DEPLOY.md](docs/DEPLOY.md).
 
-The whole app runs on Cloudflare Workers: static files for the web app, plus one Durable Object
-that holds the WebSockets and the relay data. Both relays share the same rules (`server/relay.ts`).
+## Security
 
-```bash
-npx wrangler login
-npm run deploy
-```
+- Keys are generated on the device (Ed25519 + X25519 identity, signed prekey, one-time prekeys); only public halves are uploaded.
+- **X3DH** starts a conversation, the **Double Ratchet** gives every message its own key (forward secrecy, post-compromise recovery).
+- **Sealed sender**: the relay sees only the recipient and an opaque blob. Groups are encrypted per member.
+- **Safety numbers** let two people check that the relay did not swap keys.
+- Sign-in: the password is stretched (PBKDF2-SHA-256, 310k rounds) and split into a vault key that never leaves the device and a login key the server stores only as a hash. The server keeps an encrypted backup it cannot open.
+- Primitives come from the audited [`@noble`](https://paulmillr.com/noble/) libraries; this project itself is not audited.
 
-Full guide (in Mongolian): [docs/DEPLOY.md](docs/DEPLOY.md)
-
-## Accounts and signing in
-
-Sign in with your **handle + password** on any device. The password is stretched (PBKDF2-SHA-256,
-310k rounds, salted with the handle) and split with HKDF into a **vault key** that encrypts all your
-data and never leaves the device, and a **login key** whose SHA-256 hash is all the server keeps.
-The server also keeps an encrypted copy of your account (it can't open it), so a new device can
-restore your keys and history. Ten wrong passwords lock sign-in for 15 minutes. Restored sessions
-are only used to read; the first message to each person starts a fresh key agreement.
-Signing in on a new device signs out the old one. Vaults from earlier versions are migrated on sign-in.
-
-## Security model in one screen
-
-- **Keys are made on your device.** Ed25519 identity, X25519 identity, a signed prekey and 100
-  one-time prekeys. Only the public halves are uploaded.
-- **No passwords on the server.** You log in by signing a random challenge with your identity key.
-- **X3DH** to start a conversation (even while the other person is offline), then the
-  **Double Ratchet**: every message has its own key, keys are deleted after use (forward secrecy),
-  and every reply mixes in fresh randomness (recovery after compromise).
-- **Sealed sender:** the server sees only the recipient and an opaque blob.
-- **Safety numbers** (60 digits from both identity keys) detect a server swapping keys.
-- **Local vault:** everything on the device is encrypted with AES-256-GCM using a key derived from
-  your passphrase (PBKDF2-SHA-256, 310 000 rounds). Data is saved before the server is told it can
-  delete a message, so a crash can't lose messages or desync the ratchets.
-- Groups: messages are encrypted separately for each member; the server doesn't know groups exist.
-
-Primitives come from the audited [`@noble`](https://paulmillr.com/noble/) libraries. This project
-itself has not been audited — see the limitations section of the how-it-works doc.
+Step-by-step explanation (Mongolian): [docs/HOW-IT-WORKS.md](docs/HOW-IT-WORKS.md)
 
 ## Features
 
-- Direct and group chats, search, unread counts, hide previews, privacy screen, cover-on-blur.
-- Text and files (≤ 0.5 MB, image previews), copy/delete, disappearing messages with live countdown.
-- Pending / sent / delivered / read, typing indicator, offline queue with automatic resend.
-- Groups: create, rename, describe, recolor, invite, remove, leave, renew keys with everyone.
-- Contacts: add by handle (optionally checked against their contact code), nickname, verify.
-- Profile shared over the encrypted channel: display name, status, presence, photo or pattern.
-- Appearance: accent (any color), text size, bubble shape, spacing, binary background.
-- Security settings: auto-lock, change passphrase, erase vault (also deletes the server account).
+Direct and group chats, files (≤ 0.5 MB) and voice messages, replies and reactions, disappearing
+messages, read receipts and typing indicators, contact verification, recovery code, light/dark
+themes and appearance settings.
 
-## Project layout
+## Layout
 
 ```
-shared/        code used by both sides: e2ee.ts (crypto), protocol.ts (wire types), encoding.ts
-server/        relay.ts (relay rules, shared), index.ts (Node HTTP + WebSocket), store.ts (JSON file)
-cloudflare/    worker.ts (Cloudflare Worker + Durable Object with SQLite)
-src/net/       connection.ts (WebSocket + signed login), engine.ts (encrypt / decrypt / deliver)
-src/state/     chat.ts (reducer), init.ts (new identity state, vault checks)
-src/lib/       vault.ts (password keys + encrypted storage), account.ts (sign-in, backup), time, toast…
-src/components UI
-src/i18n/      en.ts (base) and mn.ts
-tests/         e2ee.test.ts, account.test.ts
-docs/          HOW-IT-WORKS.md, DEPLOY.md
+shared/       code used by app and relay: config, e2ee (crypto), protocol (wire types), encoding
+server/       relay.ts (rules for both runtimes), index.ts (Node server), store.ts (JSON file store)
+cloudflare/   worker.ts (Worker + Durable Object with SQLite)
+src/
+  net/        connection (WebSocket, signed login), engine (encrypt, decrypt, deliver)
+  state/      chat reducer, initial state, preferences
+  lib/        vault, account, storage, voice recorder, helpers
+  components/ ui, layout, chat, panel, dialogs, auth
+  i18n/       all UI strings
+  styles/     design tokens and component styles
+public/       static files and security headers (_headers)
+scripts/      dev runner, local database reset
+tests/        protocol and account tests
 ```

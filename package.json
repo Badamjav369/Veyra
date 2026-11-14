@@ -2,12 +2,13 @@
   "name": "veyra-e2ee-chat",
   "private": true,
   "version": "0.1.0",
-  "description": "SHIVNEE \u2014 quiet, end-to-end encrypted chat (React client + Node relay)",
+  "description": "Veyra — quiet, end-to-end encrypted chat (React client + Node relay)",
   "type": "module",
   "scripts": {
     "dev": "node scripts/dev.mjs",
     "dev:client": "vite",
     "server": "tsx server/index.ts",
+    "db:reset": "tsx scripts/reset-db.ts",
     "build": "npm run typecheck && vite build",
     "start": "vite build && tsx server/index.ts",
     "test": "tsx tests/e2ee.test.ts && tsx tests/account.test.ts",
@@ -16,7 +17,7 @@
     "deploy": "npm run build && wrangler deploy"
   },
   "dependencies": {
-    "@fontsource/ibm-plex-sans": "^5.3.0",
+    "@fontsource/inter": "^5.3.0",
     "@fontsource/jetbrains-mono": "^5.3.0",
     "@noble/ciphers": "^2.4.0",
     "@noble/curves": "^2.4.0",

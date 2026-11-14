@@ -26,19 +26,6 @@ function hash(seed: string): number {
   return h;
 }
 
-/** 5×5 mirrored pattern (25 booleans) derived from a seed — a visual fingerprint for each contact. */
-export function identiconCells(seed: string): boolean[] {
-  const h = hash(seed);
-  const cells: boolean[] = [];
-  for (let row = 0; row < 5; row++) {
-    for (let col = 0; col < 5; col++) {
-      const mirrored = col < 3 ? col : 4 - col;
-      cells.push(((h >>> (row * 3 + mirrored)) & 1) === 1);
-    }
-  }
-  return cells;
-}
-
 /** A QR-like 21×21 pattern for the verify screen (placeholder until real key exchange exists). */
 export function codePattern(seed: string): boolean[] {
   const N = 21;

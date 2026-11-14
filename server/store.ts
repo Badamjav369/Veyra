@@ -16,6 +16,7 @@ interface Data {
 export class Store implements RelayStore {
   private data: Data = { users: {}, mail: {} };
   private timer: NodeJS.Timeout | null = null;
+  private dirty = false;
 
   constructor(private file: string) {
     if (existsSync(file)) {
@@ -104,9 +105,8 @@ export class Store implements RelayStore {
     this.changed();
   }
 
-  /** Forget undelivered envelopes older than `maxAgeMs`. */
-  purge(maxAgeMs: number) {
-    const cutoff = Date.now() - maxAgeMs;
+  purgeMail(before: number) {
+    const cutoff = before;
     let changed = false;
     for (const [h, box] of Object.entries(this.data.mail)) {
       const kept = box.filter((e) => e.ts >= cutoff);
@@ -126,13 +126,17 @@ export class Store implements RelayStore {
   }
 
   private changed() {
+    this.dirty = true;
     if (this.timer) return;
     this.timer = setTimeout(() => this.flush(), 250);
   }
 
+  /** Writes pending changes. Does nothing when there are none, so a stopped relay never overwrites a file edited meanwhile. */
   flush() {
     if (this.timer) clearTimeout(this.timer);
     this.timer = null;
+    if (!this.dirty) return;
+    this.dirty = false;
     mkdirSync(dirname(this.file), { recursive: true });
     const tmp = `${this.file}.tmp`;
     writeFileSync(tmp, JSON.stringify(this.data));

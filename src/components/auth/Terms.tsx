@@ -1,4 +1,4 @@
-import { Modal } from './Modal';
+import { Modal } from '../ui/Modal';
 
 export const TERMS_UPDATED = 'November 1, 2026';
 

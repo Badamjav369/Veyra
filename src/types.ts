@@ -69,6 +69,17 @@ export interface SystemEvent {
   params?: { name?: string; names?: string[]; timer?: Timer; n?: number; group?: string };
 }
 
+/** A quoted message this one answers. A snapshot, so it still shows if the original disappears. */
+export interface ReplyRef {
+  mid: string;
+  who: string; // 'me' or the sender's handle
+  text: string; // first part of the original text
+  file?: string; // the original's file name, if it was a file
+}
+
+/** Quick reactions offered on every message. */
+export const REACTIONS = ['👍', '❤️', '😂', '😮', '😢', '🙏', '🔥'] as const;
+
 export interface Message {
   id: number; // local
   mid?: string; // global id (shared with the other side, used for receipts)
@@ -83,6 +94,9 @@ export interface Message {
   readSent?: boolean;
   file?: FileInfo;
   system?: SystemEvent;
+  reply?: ReplyRef;
+  /** One reaction per person: 'me' or a handle → emoji. */
+  reactions?: Record<string, string>;
 }
 
 /** One end-to-end encrypted session with one person. Lives only inside the encrypted vault. */
@@ -131,7 +145,8 @@ export interface ChatState {
   account?: { dek: string; recovery?: { auth: string; wrap: string; at: number } };
 }
 
-export const PALETTE = ['#8FD9B6', '#9DB8F2', '#E2B67F', '#C3A8F0', '#E7A3B4', '#7FD1D9', '#D9D27F'];
+/** Avatar / contact colours: soft pastels; initials on top use the dark --av-ink. */
+export const PALETTE = ['#C9D2F2', '#F4CDBB', '#CBE3D6', '#E3CCE8', '#F0E0B4'];
 
 export function colorFor(handle: string): string {
   let h = 0;

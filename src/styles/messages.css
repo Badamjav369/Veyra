@@ -1,0 +1,548 @@
+/* ---------- Day separators & system lines ---------- */
+
+.day-sep {
+  display: flex;
+  justify-content: center;
+  margin: 12px 0 8px;
+}
+
+.day-sep span,
+.msg-system span {
+  padding: 5px 14px;
+  border-radius: var(--r-pill);
+  background: var(--surface);
+  box-shadow: 0 1px 3px rgba(60, 72, 140, 0.1);
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.day-sep span {
+  font-weight: 600;
+}
+
+.msg-system {
+  display: flex;
+  justify-content: center;
+  padding: 3px 0;
+  text-align: center;
+}
+
+/* Events (timer changes, members joining…) are quiet one-liners, not bubbles. */
+.msg-system span {
+  padding: 2px 10px;
+  background: transparent;
+  box-shadow: none;
+  font-size: 12px;
+  color: var(--faint);
+}
+
+/* ---------- Messages ---------- */
+
+.msg {
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+  padding: var(--msg-gap, 5px) 0;
+}
+
+.msg--mine {
+  justify-content: flex-end;
+}
+
+.msg__avatar {
+  flex: 0 0 32px;
+  margin-bottom: 24px;
+}
+
+.msg__col {
+  max-width: min(78%, 560px);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.msg--theirs .msg__col {
+  align-items: flex-start;
+}
+
+.msg--mine .msg__col {
+  align-items: flex-end;
+}
+
+.msg__sender {
+  padding-left: 6px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.msg__line {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-1);
+  max-width: 100%;
+}
+
+.msg--mine .msg__line {
+  flex-direction: row-reverse;
+}
+
+.bubble {
+  padding: var(--bubble-pad, 11px 16px);
+  font-size: calc(15px * var(--text-scale, 1));
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+}
+
+/* Theirs: white with a whisper of shadow. Mine: the washed-out accent with dark ink. */
+.bubble--theirs {
+  background: var(--bubble-in);
+  border-radius: var(--bubble-r) var(--bubble-r) var(--bubble-r) var(--bubble-tail);
+  box-shadow: 0 1px 2px rgba(60, 72, 140, 0.08), 0 4px 14px rgba(60, 72, 140, 0.06);
+}
+
+.bubble--mine {
+  background: var(--bubble-out);
+  color: var(--bubble-out-ink);
+  border-radius: var(--bubble-r) var(--bubble-r) var(--bubble-tail) var(--bubble-r);
+}
+
+.bubble__noise {
+  color: var(--faint);
+  font-size: 0.92em;
+  letter-spacing: 0.02em;
+}
+
+.bubble--mine .bubble__noise {
+  color: var(--bubble-out-sub);
+}
+
+.bubble__noise.is-hidden {
+  color: var(--faint);
+}
+
+.meta {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 6px;
+  font-size: 11.5px;
+  color: var(--faint);
+  font-variant-numeric: tabular-nums;
+}
+
+.meta__timer {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--accent-text);
+}
+
+.meta__status {
+  color: var(--accent-text);
+}
+
+.meta__check {
+  display: inline-flex;
+  color: var(--faint);
+}
+
+.meta__check--read {
+  color: var(--accent-text);
+}
+
+.meta__check--failed {
+  color: var(--danger);
+}
+
+/*
+  Hover tools: a small pill that straddles the bubble's top corner on its outer side —
+  half above the bubble, half over it, and sticking out past the corner so it never covers the text.
+  Theirs: top-right corner. Mine: top-left corner.
+*/
+.msg__tools {
+  position: absolute;
+  top: -24px;
+  z-index: 3;
+  display: flex;
+  gap: 1px;
+  padding: 3px;
+  border-radius: var(--r-pill);
+  background: var(--surface);
+  box-shadow: 0 0 0 1px var(--line), 0 6px 18px rgba(60, 72, 140, 0.18);
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(4px) scale(0.96);
+  transition: opacity 0.14s, transform 0.14s;
+}
+
+.msg--theirs .msg__tools {
+  left: calc(100% - 28px);
+  transform-origin: left bottom;
+}
+
+.msg--mine .msg__tools {
+  right: calc(100% - 28px);
+  transform-origin: right bottom;
+}
+
+.msg:hover .msg__tools,
+.msg__tools:focus-within,
+.msg.is-active .msg__tools {
+  opacity: 1;
+  pointer-events: auto;
+  transform: none;
+}
+
+/* A bridge so the pointer can travel from the bubble to the pill without the pill vanishing. */
+.msg__tools::before {
+  content: '';
+  position: absolute;
+  inset: -6px;
+  z-index: -1;
+}
+
+.msg__tools .icon-btn {
+  width: 28px;
+  height: 28px;
+}
+
+.msg__tools .icon-btn:hover:not(:disabled) {
+  background: var(--accent-soft);
+  color: var(--accent-text);
+}
+
+.msg__tools .icon-btn[aria-expanded='true'] {
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+
+@media (hover: none) {
+  .msg__tools {
+    display: none;
+  }
+
+  .msg.is-active .msg__tools {
+    display: flex;
+  }
+}
+
+/* Narrower chats: keep the pill inside the bubble's own width so it can't run off the screen. */
+@media (max-width: 1179px) {
+  .msg--theirs .msg__tools {
+    left: 10px;
+  }
+
+  .msg--mine .msg__tools {
+    right: 10px;
+  }
+}
+
+/* Quoted message inside a bubble: a soft inset card with a slim accent bar */
+.quote {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: 100%;
+  min-width: 0;
+  margin: 0 0 6px;
+  padding: 8px 12px 9px 20px;
+  border: 0;
+  border-radius: 16px;
+  background: var(--tint);
+  color: inherit;
+  text-align: left;
+  font-size: calc(12.5px * var(--text-scale, 1));
+  line-height: 1.4;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.quote::before {
+  content: '';
+  position: absolute;
+  left: 9px;
+  top: 8px;
+  bottom: 8px;
+  width: 3px;
+  border-radius: 3px;
+  background: var(--accent-text);
+}
+
+.quote:hover {
+  background: color-mix(in srgb, var(--tint) 60%, var(--surface));
+}
+
+.quote__who {
+  font-size: 0.92em;
+  font-weight: 700;
+  color: var(--accent-text);
+}
+
+.quote__text {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  opacity: 0.85;
+}
+
+/* A bubble that carries a quote hugs it: the quote sits inset, the message text gets its own padding. */
+.bubble:has(> .quote) {
+  display: flex;
+  flex-direction: column;
+  min-width: min(240px, 100%);
+  padding: 6px 6px 10px;
+}
+
+.bubble:has(> .quote) > span[aria-hidden] {
+  display: block;
+  padding: 2px 10px 0;
+}
+
+/*
+  Emoji picker: fixed-positioned by MessageItem so it can sit exactly above the pill,
+  flip below when the message is near the top, and slide sideways to stay inside the chat.
+*/
+.react-picker {
+  position: fixed;
+  z-index: 30;
+  display: flex;
+  gap: 2px;
+  padding: 5px;
+  border-radius: var(--r-pill);
+  background: var(--surface);
+  box-shadow: 0 0 0 1px var(--line), 0 14px 36px rgba(60, 72, 140, 0.26);
+  animation: pop 0.14s ease-out;
+}
+
+.react-picker__item {
+  width: 38px;
+  height: 38px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  font-size: 21px;
+  line-height: 1;
+  transition: transform 0.12s, background 0.12s;
+}
+
+.react-picker__item:hover,
+.react-picker__item:focus-visible {
+  background: var(--accent-soft);
+  transform: scale(1.18);
+}
+
+.react-picker__item.is-mine {
+  background: var(--accent-soft);
+  box-shadow: inset 0 0 0 1.5px var(--accent-text);
+}
+
+/* Reaction chips hang from the bubble's bottom edge, overlapping it by a few pixels. */
+.reactions {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: -14px;
+  padding: 0 12px;
+}
+
+.msg--mine .reactions {
+  justify-content: flex-end;
+}
+
+.reaction {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 26px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: var(--r-pill);
+  background: var(--surface);
+  box-shadow: 0 0 0 1px var(--line), 0 3px 10px rgba(60, 72, 140, 0.14);
+  line-height: 1;
+  transition: box-shadow 0.15s, transform 0.15s;
+}
+
+.reaction:hover:not(:disabled) {
+  transform: translateY(-1px);
+}
+
+.reaction.is-mine {
+  background: var(--accent-soft);
+  box-shadow: 0 0 0 1.5px var(--accent-text), 0 3px 10px rgba(60, 72, 140, 0.14);
+}
+
+.reaction__emoji {
+  font-size: 14px;
+}
+
+.reaction__count {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.reaction.is-mine .reaction__count {
+  color: var(--accent-text);
+}
+
+/* "Show the original" highlight */
+.msg.is-flash .bubble,
+.msg.is-flash .file-card {
+  animation: flash 1.6s ease-out;
+}
+
+@keyframes flash {
+  0%,
+  35% {
+    outline: var(--bw-4) solid var(--accent-2);
+    outline-offset: 2px;
+  }
+  100% {
+    outline: var(--bw-4) solid transparent;
+    outline-offset: 2px;
+  }
+}
+
+/* ---------- File cards ---------- */
+
+.file-card {
+  width: min(320px, 100%);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+  border-radius: var(--bubble-r);
+  background: var(--bubble-in);
+  box-shadow: 0 1px 2px rgba(60, 72, 140, 0.08), 0 4px 14px rgba(60, 72, 140, 0.06);
+}
+
+.msg--mine .file-card {
+  background: var(--bubble-out);
+  color: var(--bubble-out-ink);
+}
+
+.msg--mine .file-card__meta,
+.msg--mine .file-card__sum {
+  color: var(--bubble-out-sub);
+}
+
+.file-card__top {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: 8px;
+  border-radius: 16px;
+  background: var(--tint);
+}
+
+.file-card.is-hidden {
+  filter: blur(3px);
+}
+
+.file-card__image {
+  display: block;
+  width: 100%;
+  max-height: 260px;
+  object-fit: cover;
+  border-radius: var(--r-m);
+}
+
+.file-card__audio {
+  display: block;
+  width: 100%;
+}
+
+.file-card__icon {
+  flex: none;
+  width: 42px;
+  height: 42px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 14px;
+  background: var(--accent-soft);
+  color: var(--accent-text);
+}
+
+.file-card__text {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.file-card__name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.file-card__meta,
+.file-card__sum {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.file-card__sum {
+  word-break: break-all;
+  font-variant-numeric: tabular-nums;
+}
+
+.file-card__caption {
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+/* ---------- Typing ---------- */
+
+.typing {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 6px;
+  font-size: 12.5px;
+  color: var(--muted);
+}
+
+.typing__dots {
+  display: inline-flex;
+  gap: 4px;
+  padding: 8px 12px;
+  border-radius: var(--r-pill);
+  background: var(--surface);
+  box-shadow: 0 1px 3px rgba(60, 72, 140, 0.1);
+}
+
+.typing__dots i {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+  animation: pulse 1.2s ease-in-out infinite;
+}
+
+.typing__dots i:nth-child(2) {
+  animation-delay: 0.15s;
+}
+
+.typing__dots i:nth-child(3) {
+  animation-delay: 0.3s;
+}
+
+:root[data-density='compact'] {
+  --msg-gap: 2px;
+  --bubble-pad: 8px 14px;
+}

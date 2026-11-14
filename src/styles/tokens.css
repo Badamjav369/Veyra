@@ -1,0 +1,263 @@
+/*
+  Veyra — periwinkle haze.
+  Three floating cards on a pale canvas, soft diffuse shadows, pill-shaped controls.
+  Periwinkle is the voice, peach the small warm accent. Every size below comes from these tokens.
+*/
+
+:root {
+  /* ---- Surfaces ---- */
+  --canvas: #eceef7; /* the page */
+  --surface: #fbfbfe; /* the floating cards */
+  --panel: var(--surface); /* raised surfaces (alias kept for older rules) */
+  --panel-hi: #ffffff; /* hover / knob */
+  --chat: #f3f4fa; /* the conversation background */
+  --well: var(--chat); /* sunken areas and inputs */
+  --hover: #eef0f8;
+  --seg-on: #ffffff;
+  --tint: rgba(255, 255, 255, 0.62); /* quotes and file cards inside a bubble */
+  --bubble-in: #ffffff;
+  --bubble-out: #d6dcf5;
+  --bubble-out-ink: #1e2238;
+  --bubble-out-sub: #4a5178;
+
+  /* ---- Ink ---- */
+  --ink: #1e2238;
+  --text: var(--ink);
+  --muted: #565b73;
+  --faint: #636981;
+  --line: #e5e8f3;
+  --line-2: #cbd0e4;
+  --line-3: #aab0cb;
+  --av-ink: #1e2238; /* initials on the pastel avatars */
+
+  /* ---- Brand (accent values are overwritten from Settings → Appearance) ---- */
+  --peach: #f6bfa8;
+  --peach-soft: #fbe3d8;
+  --accent: #aebbea;
+  --accent-2: #f6bfa8;
+  --accent-ink: #1f2757; /* text on top of --accent */
+  --accent-text: #3b4a9b; /* accent used as text on the light surfaces */
+  --accent-soft: #e4e8f8;
+  --accent-line: color-mix(in srgb, var(--accent) 60%, var(--surface));
+  --accent-glow: color-mix(in srgb, var(--accent) 45%, transparent);
+
+  /* ---- Status ---- */
+  --danger: #a8362e;
+  --danger-soft: #f8e3df;
+  --warn: #76470f;
+  --warn-soft: #f9ead8;
+  --ok-soft: var(--accent-soft);
+
+  /* ---- Shadow: soft and diffuse, tinted by the brand hue ---- */
+  --shadow: rgba(60, 72, 140, 0.1);
+  --sh-dark: rgba(60, 72, 140, 0.16);
+  --sh-light: transparent; /* the old "light side" of the neumorphic pair is gone */
+
+  /* Elevation levels: 1 flat · 2 hover · 3 raised · 4 modal · 5 popover */
+  --e1: 0 1px 3px rgba(60, 72, 140, 0.1), 0 0 0 1px var(--line);
+  --e2: 0 4px 14px rgba(60, 72, 140, 0.12);
+  --e3: 0 8px 24px rgba(60, 72, 140, 0.13);
+  --e4: 0 18px 50px rgba(60, 72, 140, 0.2);
+  --e5: 0 22px 60px rgba(60, 72, 140, 0.26);
+  --card-shadow: 0 10px 34px rgba(60, 72, 140, 0.11);
+  /* Sunken layers: a hairline and a whisper of depth */
+  --in1: inset 0 0 0 1px var(--line);
+  --in2: inset 0 1px 3px rgba(60, 72, 140, 0.1), inset 0 0 0 1px var(--line);
+  --in3: inset 0 2px 6px rgba(60, 72, 140, 0.12), inset 0 0 0 1px var(--line);
+
+  /* ---- Shape ---- */
+  --r-xs: 6px;
+  --r-s: 10px;
+  --r-m: 14px;
+  --r-l: 20px;
+  --r-xl: 28px;
+  --r-pill: 999px;
+  --bw-1: 1px; /* thin */
+  --bw-2: 2px; /* regular */
+  --bw-4: 4px; /* thick */
+  --bubble-r: 22px;
+  --bubble-tail: 8px;
+
+  /* ---- Spacing ---- */
+  --sp-1: 4px;
+  --sp-2: 8px;
+  --sp-3: 12px;
+  --sp-4: 16px;
+  --sp-5: 24px;
+  --sp-6: 32px;
+  --gap: 16px; /* between the floating cards */
+
+  /* ---- Type ---- */
+  --font-sans: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-mono: var(--font-sans); /* codes use tabular numerals instead of a terminal font */
+  --text-scale: 1;
+
+  --paper: #ffffff; /* the white card behind QR codes */
+  --on-peach: #4a2412; /* text on the peach accent */
+  --peach-glow: rgba(200, 120, 90, 0.3);
+
+  color-scheme: light;
+}
+
+/* Night: the same haze after dark. Cards go deep indigo, shadows deepen, bubbles keep their hue. */
+:root[data-theme='dark'] {
+  --canvas: #11131e;
+  --surface: #1a1d2b;
+  --panel-hi: #272b40;
+  --chat: #161825;
+  --hover: #232738;
+  --seg-on: #2d3250;
+  --tint: rgba(255, 255, 255, 0.1);
+  --bubble-in: #242839;
+  --bubble-out: #3a4378;
+  --bubble-out-ink: #e9ebf6;
+  --bubble-out-sub: #bfc6ea;
+
+  --ink: #e9ebf6;
+  --muted: #aeb3cc;
+  --faint: #9aa0bc;
+  --line: #292e44;
+  --line-2: #3a4160;
+  --line-3: #555d86;
+  --av-ink: #1e2238;
+
+  --peach: #f0b7a0;
+  --peach-soft: #43302a;
+  --accent-soft: #272c4a;
+  --danger: #f0958e;
+  --danger-soft: #3b2422;
+  --warn: #ebc57e;
+  --warn-soft: #3a2f1b;
+
+  --shadow: rgba(0, 0, 0, 0.38);
+  --sh-dark: rgba(0, 0, 0, 0.5);
+  --e1: 0 1px 3px rgba(0, 0, 0, 0.4), 0 0 0 1px var(--line);
+  --e2: 0 4px 14px rgba(0, 0, 0, 0.4);
+  --e3: 0 8px 24px rgba(0, 0, 0, 0.45);
+  --e4: 0 18px 50px rgba(0, 0, 0, 0.6);
+  --e5: 0 22px 60px rgba(0, 0, 0, 0.7);
+  --card-shadow: 0 10px 34px rgba(0, 0, 0, 0.38);
+  --in2: inset 0 1px 3px rgba(0, 0, 0, 0.35), inset 0 0 0 1px var(--line);
+  --in3: inset 0 2px 6px rgba(0, 0, 0, 0.4), inset 0 0 0 1px var(--line);
+
+  --peach-glow: rgba(0, 0, 0, 0.5);
+  --paper: #f3f4fa;
+
+  color-scheme: dark;
+}
+
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--canvas);
+  color: var(--ink);
+  font-family: var(--font-sans);
+  font-size: 15px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+button,
+input,
+textarea {
+  font: inherit;
+  color: inherit;
+}
+
+button {
+  cursor: pointer;
+}
+
+button:disabled {
+  cursor: not-allowed;
+}
+
+h1,
+h2,
+h3,
+p {
+  margin: 0;
+}
+
+:focus-visible {
+  outline: var(--bw-2) solid var(--accent);
+  outline-offset: 2px;
+}
+
+::placeholder {
+  color: var(--faint);
+}
+
+::selection {
+  background: color-mix(in srgb, var(--accent) 22%, transparent);
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--line-3) transparent;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+/* Keys and codes: same family, tabular numerals. */
+.mono {
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
+}
+
+.sigil {
+  color: var(--faint);
+  font-weight: 500;
+}
+
+@keyframes pop {
+  from {
+    opacity: 0;
+    transform: translateY(6px) scale(0.97);
+  }
+}
+
+@keyframes pulse {
+  0%,
+  100% {
+    opacity: 0.3;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+}

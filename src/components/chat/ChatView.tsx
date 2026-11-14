@@ -1,20 +1,24 @@
-import { Fragment, useCallback, useEffect, useRef, useState, type Dispatch, type FormEvent, type KeyboardEvent } from 'react';
-import { useI18n } from '../i18n';
-import type { MessageKey } from '../i18n/en';
-import { hex, sha256 } from '../lib/crypto';
-import { formatDay, sameDay } from '../lib/time';
-import { useToast } from '../lib/toast';
-import { readableAccent, usePrefs } from '../prefs';
-import { activeId, convoMeta, nameOf, type ChatAction } from '../state/chat';
-import type { ChatState, FileInfo, Message, Timer } from '../types';
-import { TIMERS } from '../types';
-import { BinaryRain } from './BinaryRain';
-import { BackIcon, ClipIcon, ClockIcon, EyeOffIcon, LockIcon, PanelIcon, PlusIcon, SendIcon, ShieldIcon, UserPlusIcon, WarnIcon } from './Icons';
-import { Identicon, IdenticonStack } from './Identicon';
-import { MessageItem } from './MessageItem';
-import { copyText } from './dialogs';
-
-export const MAX_FILE_MB = 0.5; // after encryption + base64 this still fits in one 1 MiB frame
+import type { Dispatch, FormEvent, KeyboardEvent } from 'react';
+import type { ChatAction } from '../../state/chat';
+import { Fragment, useCallback, useEffect, useRef, useState } from 'react';
+import { useI18n } from '../../i18n/index';
+import type { MessageKey } from '../../i18n/en';
+import { hex, sha256 } from '../../lib/crypto';
+import { formatDay, sameDay } from '../../lib/time';
+import { useToast } from '../../lib/toast';
+import { usePrefs } from '../../state/prefs';
+import { activeId, convoMeta, nameOf } from '../../state/chat';
+import type { ChatState, FileInfo, Message, ReplyRef, Timer } from '../../types';
+import { TIMERS } from '../../types';
+import { BackIcon, ClipIcon, ClockIcon, CloseIcon, EyeOffIcon, LockIcon, MicIcon, PlusIcon, ReplyIcon, SendIcon, ShieldCheckIcon, ShieldIcon, UserPlusIcon, WarnIcon } from '../ui/Icons';
+import { Identicon } from '../ui/Identicon';
+import { PanelHandle } from '../panel/PanelHandle';
+import { LogoMark } from '../ui/Logo';
+import { MessageItem, replySummary, whoName } from './MessageItem';
+import { copyText } from '../../lib/clipboard';
+import { MAX_FILE_MB } from '../../../shared/protocol';
+import { useVoiceRecorder } from '../../lib/useVoiceRecorder';
+import { VoiceBar } from './VoiceBar';
 
 function readFile(file: File): Promise<{ dataUrl: string; buffer: ArrayBuffer }> {
   return Promise.all([
@@ -32,21 +36,23 @@ interface Props {
   state: ChatState;
   dispatch: Dispatch<ChatAction>;
   now: number;
-  onSend: (text: string, file?: FileInfo) => void;
+  onSend: (text: string, file?: FileInfo, reply?: ReplyRef) => void;
+  onReact: (mid: string, emoji: string) => void;
   onTyping: () => void;
   onBack: () => void;
-  onToggleDetails: () => void;
-  detailsOpen: boolean;
+  onTogglePanel: () => void;
+  panelOpen: boolean;
   onVerify: () => void;
   onAddContact: () => void;
   onNewGroup: () => void;
 }
 
-export function ChatView({ state, dispatch, now, onSend, onTyping, onBack, onToggleDetails, detailsOpen, onVerify, onAddContact, onNewGroup }: Props) {
+export function ChatView({ state, dispatch, now, onSend, onReact, onTyping, onBack, onTogglePanel, panelOpen, onVerify, onAddContact, onNewGroup }: Props) {
   const { t, lang } = useI18n();
   const { prefs } = usePrefs();
   const notify = useToast();
   const [draft, setDraft] = useState('');
+  const [replyTo, setReplyTo] = useState<ReplyRef | null>(null);
   const threadRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -56,14 +62,16 @@ export function ChatView({ state, dispatch, now, onSend, onTyping, onBack, onTog
   const thread = state.threads[id] ?? [];
   const timer = state.timers[id] ?? 'off';
   const typingWho = state.typing?.convo === id && state.typing.until > now ? state.contacts[state.typing.who] : undefined;
-  const accent = readableAccent(prefs.accent);
 
   useEffect(() => {
     const el = threadRef.current;
     if (el) el.scrollTop = el.scrollHeight;
   }, [id, thread.length, typingWho]);
 
-  useEffect(() => setDraft(''), [id]);
+  useEffect(() => {
+    setDraft('');
+    setReplyTo(null);
+  }, [id]);
 
   // Grow the composer with its content (up to a limit).
   useEffect(() => {
@@ -86,6 +94,19 @@ export function ChatView({ state, dispatch, now, onSend, onTyping, onBack, onTog
     },
     [dispatch, id, notify, t],
   );
+  const onReply = useCallback((m: Message) => {
+    if (!m.mid) return;
+    setReplyTo({ mid: m.mid, who: m.from === 'me' ? 'me' : m.who ?? '', text: m.text.slice(0, 200), file: m.file?.name });
+    inputRef.current?.focus();
+  }, []);
+  const onJump = useCallback((mid: string) => {
+    const el = threadRef.current?.querySelector<HTMLElement>(`[data-mid="${CSS.escape(mid)}"]`);
+    if (!el) return notify(t('msg.replyGone'));
+    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    el.classList.remove('is-flash');
+    void el.offsetWidth; // restart the highlight animation
+    el.classList.add('is-flash');
+  }, [notify, t]);
   const onSave = useCallback(
     (m: Message) => {
       if (!m.file?.dataUrl) return notify(t('file.unavailable'), 'error');
@@ -100,17 +121,36 @@ export function ChatView({ state, dispatch, now, onSend, onTyping, onBack, onTog
     [notify, t],
   );
 
+  const attach = async (file: File | undefined) => {
+    if (!file) return;
+    if (file.size > MAX_FILE_MB * 1024 * 1024) return notify(t('file.tooBig', { n: MAX_FILE_MB }), 'error');
+    try {
+      const { dataUrl, buffer } = await readFile(file);
+      const checksum = hex(await sha256(buffer));
+      onSend(draft.trim(), { name: file.name, size: file.size, type: file.type || 'application/octet-stream', checksum, dataUrl }, replyTo ?? undefined);
+      setDraft('');
+      setReplyTo(null);
+    } catch {
+      notify(t('file.readError'), 'error');
+    }
+  };
+
+  const voice = useVoiceRecorder((kind) => notify(t(kind === 'denied' ? 'voice.denied' : 'voice.unsupported'), 'error'));
+
   if (!meta) {
     const isGroupSection = state.section === 'group';
     return (
       <main className="chat chat--empty">
+        {!panelOpen && <PanelHandle open={false} onToggle={onTogglePanel} />}
         <div className="chat__stage">
-          {prefs.binary && <BinaryRain color={accent} />}
           <div className="empty">
-            <span className="empty__icon">{isGroupSection ? <PlusIcon size={22} /> : <UserPlusIcon size={22} />}</span>
+            <span className="empty__art" aria-hidden="true">
+              <LogoMark size={64} />
+            </span>
             <h1>{t('chat.emptyTitle')}</h1>
             <p>{isGroupSection ? t('chat.emptyGroup') : t('chat.emptyDirect')}</p>
             <button type="button" className="btn btn--primary" onClick={isGroupSection ? onNewGroup : onAddContact}>
+              {isGroupSection ? <PlusIcon size={18} /> : <UserPlusIcon size={18} />}
               {isGroupSection ? t('list.newGroup') : t('list.addContact')}
             </button>
           </div>
@@ -124,8 +164,9 @@ export function ChatView({ state, dispatch, now, onSend, onTyping, onBack, onTog
   const send = () => {
     const text = draft.trim();
     if (!text) return;
-    onSend(text);
+    onSend(text, undefined, replyTo ?? undefined);
     setDraft('');
+    setReplyTo(null);
   };
 
   const submit = (e: FormEvent) => {
@@ -134,24 +175,16 @@ export function ChatView({ state, dispatch, now, onSend, onTyping, onBack, onTog
   };
 
   const onKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === 'Escape' && replyTo) {
+      e.preventDefault();
+      setReplyTo(null);
+      return;
+    }
     if (e.key !== 'Enter' || e.nativeEvent.isComposing) return;
     const wantsSend = prefs.enterToSend ? !e.shiftKey : e.ctrlKey || e.metaKey;
     if (wantsSend) {
       e.preventDefault();
       send();
-    }
-  };
-
-  const attach = async (file: File | undefined) => {
-    if (!file) return;
-    if (file.size > MAX_FILE_MB * 1024 * 1024) return notify(t('file.tooBig', { n: MAX_FILE_MB }), 'error');
-    try {
-      const { dataUrl, buffer } = await readFile(file);
-      const checksum = hex(await sha256(buffer));
-      onSend(draft.trim(), { name: file.name, size: file.size, type: file.type || 'application/octet-stream', checksum, dataUrl });
-      setDraft('');
-    } catch {
-      notify(t('file.readError'), 'error');
     }
   };
 
@@ -166,9 +199,7 @@ export function ChatView({ state, dispatch, now, onSend, onTyping, onBack, onTog
       (meta.unverifiedCount > 0
         ? t('chat.groupSubUnverified', { n: meta.members.length + 1, u: meta.unverifiedCount })
         : t('chat.groupSub', { n: meta.members.length + 1 }))
-    : meta.verified
-      ? t('chat.directSub')
-      : t('chat.directSubChanged');
+    : t('chat.directSub');
 
   return (
     <main className="chat" aria-label={meta.name}>
@@ -176,32 +207,23 @@ export function ChatView({ state, dispatch, now, onSend, onTyping, onBack, onTog
         <button type="button" className="icon-btn chat__back" aria-label={t('chat.back')} onClick={onBack}>
           <BackIcon />
         </button>
-        {isGroup ? (
-          <IdenticonStack people={meta.members.map((p) => ({ seed: p, color: state.contacts[p]?.color ?? '#93A19C' }))} size={36} />
-        ) : (
-          <Identicon seed={meta.seed} color={meta.color} size={42} photo={state.contacts[meta.seed]?.avatar} />
-        )}
+        <Identicon seed={meta.seed} color={meta.color} size={46} shape={isGroup ? 'square' : 'circle'} photo={isGroup ? undefined : state.contacts[meta.seed]?.avatar} />
         <div className="chat__title">
           <h1>
             <span className="chat__handle">
-              <span className="sigil" style={isGroup ? { color: meta.color } : undefined}>
+              <span className="sigil">
                 {isGroup ? '#' : '@'}
               </span>
               {meta.name}
             </span>
-            {meta.verified ? (
+            {meta.verified && (
               <span className="verified-icon" title={t('chat.verified')}>
-                <ShieldIcon size={15} />
+                <ShieldCheckIcon size={16} />
                 <span className="sr-only">{t('chat.verified')}</span>
-              </span>
-            ) : (
-              <span className="warn-icon" title={t('chat.unverifiedIcon')}>
-                <WarnIcon size={14} />
-                <span className="sr-only">{t('chat.unverifiedIcon')}</span>
               </span>
             )}
           </h1>
-          <p className={meta.verified || (isGroup && meta.description) ? '' : 'is-warn'}>{subtitle}</p>
+          <p>{subtitle}</p>
         </div>
         <div className="chat__actions">
           <button
@@ -219,25 +241,29 @@ export function ChatView({ state, dispatch, now, onSend, onTyping, onBack, onTog
             <span className="hide-phone">{timerLabel}</span>
           </button>
           {!isGroup && (
-            <button type="button" className="icon-btn" aria-label={t('chat.verify')} title={t('chat.verify')} onClick={onVerify}>
+            <button type="button" className="icon-btn icon-btn--bordered" aria-label={t('chat.verify')} title={t('chat.verify')} onClick={onVerify}>
               <ShieldIcon />
             </button>
           )}
-          <button
-            type="button"
-            className="icon-btn"
-            aria-expanded={detailsOpen}
-            aria-label={t('chat.details')}
-            title={t('chat.details')}
-            onClick={onToggleDetails}
-          >
-            <PanelIcon />
-          </button>
         </div>
       </header>
 
+      {!isGroup && !meta.verified && (
+        <div className="trust-banner" role="status">
+          <span className="trust-banner__icon" aria-hidden="true">
+            <WarnIcon size={18} />
+          </span>
+          <span className="trust-banner__text trust-banner__text--long">{t('chat.trustBanner', { name: `@${meta.name}` })}</span>
+          <span className="trust-banner__text trust-banner__text--short">{t('chat.trustShort')}</span>
+          <button type="button" className="btn btn--small trust-banner__btn" onClick={onVerify}>
+            {t('chat.trustVerify')}
+          </button>
+        </div>
+      )}
+
+      {!panelOpen && <PanelHandle open={false} onToggle={onTogglePanel} />}
+
       <div className="chat__stage">
-        {prefs.binary && <BinaryRain color={accent} />}
         <div ref={threadRef} className="thread">
           <div className="thread__inner" role="log" aria-label={t('chat.messages')}>
             <div className="notice">
@@ -269,6 +295,9 @@ export function ChatView({ state, dispatch, now, onSend, onTyping, onBack, onTog
                     onCopy={onCopy}
                     onDelete={onDelete}
                     onSave={onSave}
+                    onReply={onReply}
+                    onReact={onReact}
+                    onJump={onJump}
                   />
                 </Fragment>
               );
@@ -290,39 +319,65 @@ export function ChatView({ state, dispatch, now, onSend, onTyping, onBack, onTog
 
       <form className="composer" onSubmit={submit}>
         {state.privacyScreen && <p className="composer__privacy">{t('chat.privacyScreenOn')}</p>}
+        {replyTo && (
+          <div className="reply-bar">
+            <span className="reply-bar__icon" aria-hidden="true">
+              <ReplyIcon size={16} />
+            </span>
+            <button type="button" className="reply-bar__body" title={t('msg.jump')} onClick={() => onJump(replyTo.mid)}>
+              <span className="reply-bar__who">{t('msg.replyingTo', { name: whoName(replyTo.who, t, state.contacts) })}</span>
+              <span className="reply-bar__text">{replySummary(replyTo)}</span>
+            </button>
+            <button type="button" className="icon-btn icon-btn--tiny" aria-label={t('msg.cancelReply')} title={t('msg.cancelReply')} onClick={() => setReplyTo(null)}>
+              <CloseIcon size={15} />
+            </button>
+          </div>
+        )}
         <div className="composer__field field">
-          <button type="button" className="icon-btn" aria-label={t('composer.attach')} title={t('composer.attach')} onClick={() => fileRef.current?.click()}>
-            <ClipIcon />
-          </button>
-          <input
-            ref={fileRef}
-            type="file"
-            hidden
-            onChange={(e) => {
-              void attach(e.target.files?.[0]);
-              e.target.value = '';
-            }}
-          />
-          <label htmlFor="composer-input" className="sr-only">
-            {t('composer.label')}
-          </label>
-          <textarea
-            id="composer-input"
-            ref={inputRef}
-            rows={1}
-            value={draft}
-            onChange={(e) => {
-              setDraft(e.target.value);
-              if (e.target.value) onTyping();
-            }}
-            onKeyDown={onKeyDown}
-            placeholder={t(isGroup ? 'composer.placeholderGroup' : 'composer.placeholderDirect', { name: meta.name })}
-            autoComplete="off"
-            aria-describedby="composer-note"
-          />
-          <button type="submit" className="send-btn" aria-label={t('composer.send')} title={t('composer.send')} disabled={!draft.trim()}>
-            <SendIcon />
-          </button>
+          {voice.phase !== 'idle' ? (
+            <VoiceBar voice={voice} onSend={(file) => void attach(file)} />
+          ) : (
+            <>
+              <button type="button" className="icon-btn" aria-label={t('composer.attach')} title={t('composer.attach')} onClick={() => fileRef.current?.click()}>
+                <ClipIcon />
+              </button>
+              <input
+                ref={fileRef}
+                type="file"
+                hidden
+                onChange={(e) => {
+                  void attach(e.target.files?.[0]);
+                  e.target.value = '';
+                }}
+              />
+              <label htmlFor="composer-input" className="sr-only">
+                {t('composer.label')}
+              </label>
+              <textarea
+                id="composer-input"
+                ref={inputRef}
+                rows={1}
+                value={draft}
+                onChange={(e) => {
+                  setDraft(e.target.value);
+                  if (e.target.value) onTyping();
+                }}
+                onKeyDown={onKeyDown}
+                placeholder={t(isGroup ? 'composer.placeholderGroup' : 'composer.placeholderDirect', { name: meta.name })}
+                autoComplete="off"
+                aria-describedby="composer-note"
+              />
+              {draft.trim() ? (
+                <button type="submit" className="send-btn" aria-label={t('composer.send')} title={t('composer.send')}>
+                  <SendIcon />
+                </button>
+              ) : (
+                <button type="button" className="send-btn" aria-label={t('voice.record')} title={t('voice.record')} onClick={() => void voice.start()}>
+                  <MicIcon />
+                </button>
+              )}
+            </>
+          )}
         </div>
         <p className="composer__note" id="composer-note">
           <LockIcon size={12} />

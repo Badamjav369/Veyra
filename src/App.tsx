@@ -1,28 +1,31 @@
 import { useCallback, useEffect, useReducer, useRef, useState } from 'react';
-import { ChatView } from './components/ChatView';
-import { DetailsPanel } from './components/DetailsPanel';
-import { AddContactDialog, ConfirmDialog, InviteDialog, NewGroupDialog, VerifyDialog } from './components/dialogs';
-import { LogoMark } from './components/Logo';
-import { ProfileDialog } from './components/ProfileDialog';
-import { SettingsDialog } from './components/SettingsDialog';
-import { Sidebar } from './components/Sidebar';
-import { AuthScreen } from './components/AuthScreen';
-import { useI18n } from './i18n';
+import { ChatView } from './components/chat/ChatView';
+import { SidePanel, type SectionId } from './components/panel/SidePanel';
+import { AddContactDialog } from './components/dialogs/AddContactDialog';
+import { ConfirmDialog } from './components/dialogs/ConfirmDialog';
+import { InviteDialog } from './components/dialogs/InviteDialog';
+import { NewGroupDialog } from './components/dialogs/NewGroupDialog';
+import { VerifyDialog } from './components/dialogs/VerifyDialog';
+import { LogoMark } from './components/ui/Logo';
+import { ProfileDialog } from './components/dialogs/ProfileDialog';
+import { MobileNav } from './components/layout/MobileNav';
+import { ConversationList } from './components/layout/ConversationList';
+import { AuthScreen } from './components/auth/AuthScreen';
+import { useI18n } from './i18n/index';
 import { useToast } from './lib/toast';
 import { makeBackup, makeRecovery } from './lib/account';
-import { RecoveryDialog } from './components/RecoveryCode';
+import { RecoveryDialog } from './components/dialogs/RecoveryDialog';
 import { deriveAccountKeys, deviceId, forgetAccount, markSynced, saveVault, type VaultSession } from './lib/vault';
 import { defaultServerUrl, type ConnStatus } from './net/connection';
 import { Engine, newGroupId, newMessageId } from './net/engine';
-import { usePrefs } from './prefs';
-import { activeId, chatReducer, contactOf, convoMeta, isGroupId, nameOf, type ChatAction } from './state/chat';
-import type { ChatState, Contact, FileInfo, Group, Profile } from './types';
+import { usePrefs } from './state/prefs';
+import { activeId, chatReducer, contactOf, isGroupId, nameOf, type ChatAction } from './state/chat';
+import type { ChatState, Contact, FileInfo, Group, Profile, ReplyRef } from './types';
 import { PALETTE } from './types';
 
 type Dialog =
   | { kind: 'group' }
   | { kind: 'verify' }
-  | { kind: 'settings' }
   | { kind: 'profile' }
   | { kind: 'contact' }
   | { kind: 'invite' }
@@ -30,7 +33,7 @@ type Dialog =
   | { kind: 'confirm'; action: 'leave' | 'delete' | 'clear' | 'erase' }
   | null;
 
-const WIDE = '(min-width: 1200px)';
+const WIDE = '(min-width: 1440px)';
 
 export type SignOutReason = 'lock' | 'erase' | 'replaced' | 'conflict';
 
@@ -77,7 +80,8 @@ function ChatApp({ initial, session: initialSession, onLocked }: { initial: Chat
   const [state, rawDispatch] = useReducer(chatReducer, initial);
   // Accounts without a recovery code are asked to make one right away.
   const [dialog, setDialog] = useState<Dialog>(() => (initial.account?.recovery ? null : { kind: 'recovery' }));
-  const [detailsOpen, setDetailsOpen] = useState(() => window.matchMedia(WIDE).matches);
+  const [panelOpen, setPanelOpen] = useState(() => window.matchMedia(WIDE).matches);
+  const [panelSection, setPanelSection] = useState<SectionId | null>(null);
   const [pane, setPane] = useState<'list' | 'chat'>('list'); // phones only
   const [now, setNow] = useState(() => Date.now());
   const [away, setAway] = useState(false);
@@ -103,7 +107,6 @@ function ChatApp({ initial, session: initialSession, onLocked }: { initial: Chat
   );
 
   const current = activeId(state);
-  const meta = convoMeta(state, current);
   const thread = state.threads[current] ?? [];
   const pending = thread.some((m) => m.revealed < m.text.length);
 
@@ -236,14 +239,27 @@ function ChatApp({ initial, session: initialSession, onLocked }: { initial: Chat
   /* ---- actions that talk to the other side ---- */
 
   const send = useCallback(
-    (text: string, file?: FileInfo) => {
+    (text: string, file?: FileInfo, reply?: ReplyRef) => {
       const convo = activeId(stateRef.current);
       if (!convo) return;
       const mid = newMessageId();
       const at = Date.now();
       const timer = stateRef.current.timers[convo] ?? 'off';
-      act({ type: 'send', convo, mid, text, file, at });
-      void engine.current?.sendText(convo, { mid, text, at, timer, file });
+      act({ type: 'send', convo, mid, text, file, at, reply });
+      void engine.current?.sendText(convo, { mid, text, at, timer, file, reply });
+    },
+    [act],
+  );
+
+  /** Your reaction to a message: picking the same emoji again takes it back. */
+  const react = useCallback(
+    (mid: string, emoji: string) => {
+      const convo = activeId(stateRef.current);
+      const m = stateRef.current.threads[convo]?.find((x) => x.mid === mid);
+      if (!convo || !m) return;
+      const next = m.reactions?.me === emoji ? '' : emoji;
+      act({ type: 'react', convo, mid, who: 'me', emoji: next });
+      engine.current?.sendReaction(convo, mid, next);
     },
     [act],
   );
@@ -325,6 +341,15 @@ function ChatApp({ initial, session: initialSession, onLocked }: { initial: Chat
     return 'ok';
   };
 
+  /** Re-checks the sign-in password locally before anything destructive. */
+  const verifyPassword = async (password: string): Promise<boolean> => {
+    try {
+      return (await deriveAccountKeys(session.current.handle, password)).auth === session.current.auth;
+    } catch {
+      return false;
+    }
+  };
+
   /** A new recovery code: the server learns only its login-key hash and the data key locked with it. */
   const newRecovery = async () => {
     const account = stateRef.current.account!;
@@ -378,56 +403,69 @@ function ChatApp({ initial, session: initialSession, onLocked }: { initial: Chat
     }
   };
 
+  const openSettings = () => {
+    setPanelSection('security');
+    setPanelOpen(true);
+  };
+
   const hidden = away && state.toggles.hideOnBlur;
 
   return (
-    <div className={`app ${hidden ? 'is-away' : ''}`} data-details={detailsOpen && meta ? 'open' : 'closed'} data-pane={pane}>
-      <Sidebar
+    <div className={`app ${hidden ? 'is-away' : ''}`} data-panel={panelOpen ? 'open' : 'closed'} data-pane={pane}>
+      <ConversationList
         state={state}
         dispatch={uiDispatch}
         net={net}
         onOpen={open}
         onNewGroup={() => setDialog({ kind: 'group' })}
         onAddContact={() => setDialog({ kind: 'contact' })}
-        onSettings={() => setDialog({ kind: 'settings' })}
         onProfile={() => setDialog({ kind: 'profile' })}
-        onLock={() => void lock()}
       />
+
+      <MobileNav state={state} dispatch={uiDispatch} onSettings={openSettings} onProfile={() => setDialog({ kind: 'profile' })} />
 
       <ChatView
         state={state}
         dispatch={uiDispatch}
         now={now}
         onSend={send}
+        onReact={react}
         onTyping={typing}
         onBack={() => setPane('list')}
-        onToggleDetails={() => setDetailsOpen((o) => !o)}
-        detailsOpen={detailsOpen}
+        onTogglePanel={() => setPanelOpen((o) => !o)}
+        panelOpen={panelOpen}
         onVerify={() => setDialog({ kind: 'verify' })}
         onAddContact={() => setDialog({ kind: 'contact' })}
         onNewGroup={() => setDialog({ kind: 'group' })}
       />
 
-      {detailsOpen && meta && (
+      {panelOpen && (
         <>
-          <button type="button" className="details-backdrop" aria-hidden="true" tabIndex={-1} onClick={() => setDetailsOpen(false)} />
-          <DetailsPanel
+          <button type="button" className="panel-backdrop" aria-hidden="true" tabIndex={-1} onClick={() => setPanelOpen(false)} />
+          <SidePanel
             state={state}
             dispatch={uiDispatch}
-            onClose={() => setDetailsOpen(false)}
+            openSection={panelSection}
+            onOpenSection={setPanelSection}
+            onClose={() => setPanelOpen(false)}
             onVerify={() => setDialog({ kind: 'verify' })}
             onInvite={() => setDialog({ kind: 'invite' })}
             onConfirm={(action) => setDialog({ kind: 'confirm', action })}
             onRotate={rotate}
             onRemoveMember={groupOps.remove}
             onSaveGroup={groupOps.save}
+            onChangePassphrase={changePassphrase}
+            recoveryAt={state.account?.recovery?.at}
+            onRecovery={() => setDialog({ kind: 'recovery' })}
+            onVerifyPassword={verifyPassword}
+            onErase={() => setDialog({ kind: 'confirm', action: 'erase' })}
           />
         </>
       )}
 
       {hidden && (
         <div className="away" role="status">
-          <LogoMark size={56} />
+          <LogoMark size={64} />
           <strong>{t('away.title')}</strong>
           <span>{t('away.body')}</span>
         </div>
@@ -484,18 +522,7 @@ function ChatApp({ initial, session: initialSession, onLocked }: { initial: Chat
         />
       )}
 
-      {dialog?.kind === 'profile' && <ProfileDialog profile={state.profile} onSave={saveProfile} onClose={() => setDialog(null)} />}
-
-      {dialog?.kind === 'settings' && (
-        <SettingsDialog
-          onChangePassphrase={changePassphrase}
-          recoveryAt={state.account?.recovery?.at}
-          onRecovery={() => setDialog({ kind: 'recovery' })}
-          onLock={() => void lock()}
-          onErase={() => setDialog({ kind: 'confirm', action: 'erase' })}
-          onClose={() => setDialog(null)}
-        />
-      )}
+      {dialog?.kind === 'profile' && <ProfileDialog profile={state.profile} onSave={saveProfile} onSignOut={lock} onClose={() => setDialog(null)} />}
 
       {dialog?.kind === 'recovery' && (
         <RecoveryDialog handle={state.profile.handle} hasCode={!!state.account?.recovery} onCreate={newRecovery} onClose={() => setDialog(null)} />

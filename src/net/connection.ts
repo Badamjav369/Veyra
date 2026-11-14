@@ -1,6 +1,7 @@
 // One WebSocket connection to the relay: signs the login challenge, matches requests to replies,
 // and reconnects with back-off when the network drops.
 
+import { RELAY_PORT } from '../../shared/config';
 import { utf8 } from '../../shared/encoding';
 import { signBytes } from '../../shared/e2ee';
 import { authMessage, type BackupMeta, type ClientMsg, type ErrorCode, type ServerMsg, type UploadBundle } from '../../shared/protocol';
@@ -26,10 +27,10 @@ interface Handlers {
 type WithoutRid<T> = T extends { rid: number } ? Omit<T, 'rid'> : never;
 const FATAL: ErrorCode[] = ['bad_signature', 'not_found', 'handle_taken', 'invalid_handle', 'replaced'];
 
-/** Default relay address: same host as the page (dev server talks to port 8787). */
+/** Default relay address: same host as the page (the dev server talks to the local relay). */
 export function defaultServerUrl(): string {
   const secure = location.protocol === 'https:';
-  if (import.meta.env.DEV) return `${secure ? 'wss' : 'ws'}://${location.hostname}:8787/ws`;
+  if (import.meta.env.DEV) return `${secure ? 'wss' : 'ws'}://${location.hostname}:${RELAY_PORT}/ws`;
   return `${secure ? 'wss' : 'ws'}://${location.host}/ws`;
 }
 

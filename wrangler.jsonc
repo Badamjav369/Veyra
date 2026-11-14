@@ -1,5 +1,5 @@
 {
-  // SHIVNEE on Cloudflare Workers: static web app + one Durable Object relay.
+  // Veyra on Cloudflare Workers: static web app + one Durable Object relay.
   // Deploy:  npm run deploy      Local Cloudflare runtime:  npm run cf:dev
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "veyra",

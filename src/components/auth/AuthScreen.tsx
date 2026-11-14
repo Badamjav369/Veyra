@@ -1,19 +1,22 @@
-import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
-import { fingerprint, generateIdentity, generateOneTimePreKeys, generateSignedPreKey, uploadBundle } from '../../shared/e2ee';
-import { HANDLE_RE } from '../../shared/protocol';
-import type { SignOutReason } from '../App';
-import { useI18n } from '../i18n';
-import { makeRecovery, recoverAccount, signIn, SignInFailure, type SignInStep } from '../lib/account';
-import { isWebCryptoAvailable } from '../lib/crypto';
-import { deriveAccountKeys, forgetAccount, hasLocal, knownAccounts, newDataKey, rememberAccount, saveVault, type VaultSession } from '../lib/vault';
-import { defaultServerUrl, registerAccount, ServerError } from '../net/connection';
-import { readableAccent, usePrefs } from '../prefs';
-import { createState } from '../state/init';
-import type { ChatState, Profile } from '../types';
-import { BinaryRain } from './BinaryRain';
-import { EyeIcon, EyeOffIcon, KeyIcon, ShieldIcon, WarnIcon } from './Icons';
-import { LogoMark, LogoShapes } from './Logo';
-import { Modal } from './Modal';
+import type { FormEvent, ReactNode } from 'react';
+import type { VaultSession } from '../../lib/vault';
+import type { SignInStep } from '../../lib/account';
+import { useEffect, useRef, useState } from 'react';
+import { fingerprint, generateIdentity, generateOneTimePreKeys, generateSignedPreKey, uploadBundle } from '../../../shared/e2ee';
+import { HANDLE_RE } from '../../../shared/protocol';
+import type { SignOutReason } from '../../App';
+import { useI18n } from '../../i18n/index';
+import { makeRecovery, recoverAccount, signIn, SignInFailure } from '../../lib/account';
+import { isWebCryptoAvailable } from '../../lib/crypto';
+import { deriveAccountKeys, forgetAccount, hasLocal, knownAccounts, newDataKey, rememberAccount, saveVault } from '../../lib/vault';
+import { defaultServerUrl, registerAccount, ServerError } from '../../net/connection';
+import { usePrefs } from '../../state/prefs';
+import { createState } from '../../state/init';
+import type { ChatState, Profile } from '../../types';
+import { colorFor } from '../../types';
+import { CheckIcon, EyeIcon, EyeOffIcon, KeyIcon, LockIcon, MoonIcon, ShieldIcon, SunIcon, WarnIcon } from '../ui/Icons';
+import { LogoMark } from '../ui/Logo';
+import { Modal } from '../ui/Modal';
 import { RecoveryCodeView } from './RecoveryCode';
 import { TermsDialog } from './Terms';
 
@@ -114,7 +117,7 @@ function Notice({ tone, children }: { tone: 'ok' | 'warn'; children: ReactNode }
 
 export function AuthScreen({ onReady, signedOut }: Props) {
   const { t } = useI18n();
-  const { prefs, setPrefs } = usePrefs();
+  const { prefs, setPrefs, theme } = usePrefs();
   const accounts = useRef(knownAccounts()).current;
   const [tab, setTab] = useState<Tab>(() => (signedOut || accounts.length ? 'signin' : 'create'));
   const [server, setServer] = useState(() => prefs.server || defaultServerUrl());
@@ -193,7 +196,7 @@ export function AuthScreen({ onReady, signedOut }: Props) {
         handle: newHandle,
         bio: '',
         presence: 'online',
-        avatar: { kind: 'identicon', seed: newHandle, color: readableAccent(prefs.accent) },
+        avatar: { kind: 'identicon', seed: newHandle, color: colorFor(newHandle) },
         publicKey: identity.sign.pub,
         fingerprint: fingerprint(identity.sign.pub),
         createdAt: Date.now(),
@@ -256,28 +259,55 @@ export function AuthScreen({ onReady, signedOut }: Props) {
 
   return (
     <div className="unlock">
-      {prefs.binary && <BinaryRain color={readableAccent(prefs.accent)} density={22} />}
       <header className="unlock__top">
         <span className="logo">
-          <LogoMark size={28} />
-          <span className="logo__word">VEYRA</span>
+          <LogoMark size={36} />
+          <span className="logo__word">Veyra</span>
         </span>
-        <div className="unlock__top-right">
-        </div>
+        <button
+          type="button"
+          className="icon-btn icon-btn--round"
+          aria-label={theme === 'dark' ? t('theme.toLight') : t('theme.toDark')}
+          title={theme === 'dark' ? t('theme.toLight') : t('theme.toDark')}
+          onClick={() => setPrefs({ theme: theme === 'dark' ? 'light' : 'dark' })}
+        >
+          {theme === 'dark' ? <SunIcon size={20} /> : <MoonIcon size={20} />}
+        </button>
       </header>
 
-      <main className="unlock__card auth">
-        <svg className="unlock__emblem" width="96" height="96" viewBox="0 0 176 176" fill="none" aria-hidden="true">
-          <circle cx="88" cy="88" r="86" stroke="#1A2124" />
-          <circle className="spin" cx="88" cy="88" r="72" stroke="#2A3539" strokeDasharray="1 7" strokeLinecap="round" />
-          <g transform="translate(40 40)">
-            <rect width="96" height="96" rx="28" fill="#161C1F" stroke="#2A3539" />
-            <svg x="8" y="8" width="80" height="80" viewBox="0 0 64 64">
-              <LogoShapes id="veyra-emblem" />
-            </svg>
-          </g>
-        </svg>
+      <div className="unlock__stage">
+      <aside className="hero">
+        <span className="hero__kicker">
+          <LockIcon size={15} />
+          {t('auth.heroKicker')}
+        </span>
+        <h2>{t('auth.heroTitle')}</h2>
+        <p>{t('auth.heroBody')}</p>
+        <div className="hero__board" aria-hidden="true">
+          <div className="tile tile--ring">
+            <div className="ring">
+              <span>
+                256
+                <small>bit</small>
+              </span>
+            </div>
+          </div>
+          <div className="tile tile--chat">
+            <span className="mini">{t('auth.heroMsgIn')}</span>
+            <span className="mini mini--out">{t('auth.heroMsgOut')}</span>
+          </div>
+          <ul className="tile tile--list">
+            {(['auth.hero.sealed', 'auth.hero.forward', 'auth.hero.password'] as const).map((k) => (
+              <li key={k}>
+                <CheckIcon size={18} />
+                {t(k)}
+              </li>
+            ))}
+          </ul>
+        </div>
+      </aside>
 
+      <main className="unlock__card auth">
         {created ? (
           <section className="auth__panel">
             <h1>{t('rc.title')}</h1>
@@ -388,51 +418,54 @@ export function AuthScreen({ onReady, signedOut }: Props) {
               </button>
               <ServerSetting value={server} onChange={setServer} />
             </form>
-            <p className="auth__switch">
-              {t('auth.noAccount')}{' '}
-              <button type="button" className="link-btn" onClick={() => setTab('create')} disabled={!!busy}>
-                {t('auth.create')}
-              </button>
-            </p>
           </section>
         ) : (
           <section id="panel-create" role="tabpanel" aria-labelledby="tab-create" className="auth__panel">
             <h1>{t('auth.createTitle')}</h1>
             <p className="unlock__body">{t('auth.createBody')}</p>
             <form className="unlock__form" onSubmit={doCreate} noValidate>
-              <label htmlFor="c-name" className="label">
-                {t('auth.displayName')}
-              </label>
-              <div className="field field--large">
-                <input id="c-name" value={displayName} maxLength={32} onChange={(e) => setDisplayName(e.target.value)} placeholder={t('auth.displayNamePh')} autoComplete="nickname" autoFocus />
+              <div className="form-row">
+                <div className="form-cell">
+                  <label htmlFor="c-name" className="label">
+                    {t('auth.displayName')}
+                  </label>
+                  <div className="field field--large">
+                    <input id="c-name" value={displayName} maxLength={32} onChange={(e) => setDisplayName(e.target.value)} placeholder={t('auth.displayNamePh')} autoComplete="nickname" autoFocus />
+                  </div>
+                </div>
+                <div className="form-cell">
+                  <label htmlFor="c-handle" className="label">
+                    {t('auth.handle')}
+                  </label>
+                  <HandleField id="c-handle" value={newHandle} onChange={setNewHandle} describedBy="c-handle-hint" invalid={newHandle.length > 0 && !handleOk} />
+                </div>
               </div>
-
-              <label htmlFor="c-handle" className="label">
-                {t('auth.handle')}
-              </label>
-              <HandleField id="c-handle" value={newHandle} onChange={setNewHandle} describedBy="c-handle-hint" invalid={newHandle.length > 0 && !handleOk} />
               <p id="c-handle-hint" className={`help ${newHandle && !handleOk ? 'is-error' : ''}`}>
                 {t('auth.handleHint')}
               </p>
 
-              <label htmlFor="c-pass" className="label">
-                {t('auth.password')}
-              </label>
-              <PassField id="c-pass" value={pass1} onChange={setPass1} autoComplete="new-password" describedBy="c-pass-hint" />
-              <div className={`meter meter--${strength}`} aria-hidden="true">
-                <i />
-                <i />
-                <i />
+              <div className="form-row">
+                <div className="form-cell">
+                  <label htmlFor="c-pass" className="label">
+                    {t('auth.password')}
+                  </label>
+                  <PassField id="c-pass" value={pass1} onChange={setPass1} autoComplete="new-password" describedBy="c-pass-hint" />
+                  <div className={`meter meter--${strength}`} aria-hidden="true">
+                    <i />
+                    <i />
+                    <i />
+                  </div>
+                </div>
+                <div className="form-cell">
+                  <label htmlFor="c-pass2" className="label">
+                    {t('auth.confirm')}
+                  </label>
+                  <PassField id="c-pass2" value={pass2} onChange={setPass2} autoComplete="new-password" invalid={!!pass2 && pass1 !== pass2} />
+                </div>
               </div>
-              <p id="c-pass-hint" className="help">
-                {t(`auth.hint.${strength}` as 'auth.hint.ok')}
+              <p id="c-pass-hint" className={`help ${pass2 && pass1 !== pass2 ? 'is-error' : ''}`}>
+                {pass2 && pass1 !== pass2 ? t('auth.mismatch') : t(`auth.hint.${strength}` as 'auth.hint.ok')}
               </p>
-
-              <label htmlFor="c-pass2" className="label">
-                {t('auth.confirm')}
-              </label>
-              <PassField id="c-pass2" value={pass2} onChange={setPass2} autoComplete="new-password" invalid={!!pass2 && pass1 !== pass2} />
-              {pass2 && pass1 !== pass2 && <p className="help is-error">{t('auth.mismatch')}</p>}
 
               <label className="rc__confirm auth__terms">
                 <input type="checkbox" checked={agreed} onChange={(e) => setAgreed(e.target.checked)} />
@@ -461,12 +494,6 @@ export function AuthScreen({ onReady, signedOut }: Props) {
               </button>
               <ServerSetting value={server} onChange={setServer} />
             </form>
-            <p className="auth__switch">
-              {t('auth.haveAccount')}{' '}
-              <button type="button" className="link-btn" onClick={() => setTab('signin')} disabled={!!busy}>
-                {t('auth.signin')}
-              </button>
-            </p>
           </section>
         )}
           </>
@@ -479,6 +506,7 @@ export function AuthScreen({ onReady, signedOut }: Props) {
           </button>
         </p>
       </main>
+      </div>
 
       {showTerms && <TermsDialog onClose={() => setShowTerms(false)} />}
       {forgot && (

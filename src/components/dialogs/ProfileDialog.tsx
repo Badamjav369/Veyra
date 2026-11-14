@@ -1,16 +1,17 @@
-import { useRef, useState, type FormEvent } from 'react';
-import { useI18n } from '../i18n';
-import { randomBytes, toB64 } from '../lib/crypto';
-import { useToast } from '../lib/toast';
-import { readableAccent, usePrefs } from '../prefs';
-import type { Avatar, Presence, Profile } from '../types';
-import { PALETTE } from '../types';
-import { ColorPicker, Segmented } from './controls';
-import { CopyIcon, ShuffleIcon, TrashIcon, UploadIcon } from './Icons';
-import { ProfileAvatar } from './Identicon';
-import { Modal } from './Modal';
-import { copyText } from './dialogs';
-import { contactCode } from '../lib/crypto';
+import type { FormEvent } from 'react';
+import { useRef, useState } from 'react';
+import { useI18n } from '../../i18n/index';
+import { randomBytes, toB64 } from '../../lib/crypto';
+import { useToast } from '../../lib/toast';
+import { normalizeAccent, usePrefs } from '../../state/prefs';
+import type { Avatar, Presence, Profile } from '../../types';
+import { PALETTE } from '../../types';
+import { ColorPicker, Segmented } from '../ui/controls';
+import { CopyIcon, LogoutIcon, ShuffleIcon, TrashIcon, UploadIcon } from '../ui/Icons';
+import { ProfileAvatar } from '../ui/Identicon';
+import { Modal } from '../ui/Modal';
+import { copyText } from '../../lib/clipboard';
+import { contactCode } from '../../lib/crypto';
 
 const PRESENCE: Presence[] = ['online', 'away', 'dnd', 'hidden'];
 
@@ -42,10 +43,13 @@ function toAvatarDataUrl(file: File): Promise<string> {
 export function ProfileDialog({
   profile,
   onSave,
+  onSignOut,
   onClose,
 }: {
   profile: Profile;
   onSave: (p: Profile) => void;
+  /** Saves everything, uploads the backup and signs out. */
+  onSignOut: () => Promise<void>;
   onClose: () => void;
 }) {
   const { t } = useI18n();
@@ -59,8 +63,10 @@ export function ProfileDialog({
   const [presence, setPresence] = useState<Presence>(profile.presence);
   const [avatar, setAvatar] = useState<Avatar>(profile.avatar);
   const [error, setError] = useState('');
+  const [signingOut, setSigningOut] = useState(false);
 
-  const colors = [readableAccent(prefs.accent), ...PALETTE.filter((c) => c.toLowerCase() !== readableAccent(prefs.accent).toLowerCase())].slice(0, 7);
+  const accent = normalizeAccent(prefs.accent);
+  const colors = [accent, ...PALETTE.filter((c) => c.toLowerCase() !== accent.toLowerCase())].slice(0, 7);
 
   const pickImage = async (file: File | undefined) => {
     if (!file) return;
@@ -85,7 +91,7 @@ export function ProfileDialog({
       <form className="form" onSubmit={save}>
         <div className="avatar-editor">
           <div className="avatar-editor__preview">
-            <ProfileAvatar avatar={avatar} size={96} />
+            <ProfileAvatar avatar={avatar} size={96} label={profile.handle} />
             <span className={`presence-dot presence-dot--${presence}`} aria-hidden="true" />
           </div>
           <div className="avatar-editor__controls">
@@ -225,7 +231,20 @@ export function ProfileDialog({
             {error}
           </p>
         )}
-        <div className="form__actions">
+        <div className="form__actions form__actions--split">
+          <button
+            type="button"
+            className="btn btn--ghost btn--signout"
+            disabled={signingOut}
+            onClick={async () => {
+              setSigningOut(true);
+              await onSignOut();
+            }}
+          >
+            <LogoutIcon size={16} />
+            {signingOut ? t('profile.signingOut') : t('vault.lock')}
+          </button>
+          <span className="form__spacer" />
           <button type="button" className="btn btn--outline" onClick={onClose}>
             {t('profile.cancel')}
           </button>

@@ -1,5 +1,6 @@
-import { useEffect, useRef, type ReactNode } from 'react';
-import { useI18n } from '../i18n';
+import type { ReactNode } from 'react';
+import { useEffect, useRef } from 'react';
+import { useI18n } from '../../i18n/index';
 import { CloseIcon } from './Icons';
 
 interface Props {

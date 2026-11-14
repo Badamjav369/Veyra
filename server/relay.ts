@@ -51,6 +51,10 @@ export interface BackupRecord extends BackupMeta {
 export const MAX_BACKUP_CHARS = 960_000; // the whole frame must stay under 1 MiB
 /** Accounts nobody signed in to for this long are deleted, and their handle becomes free again. */
 export const INACTIVE_TTL = 180 * 24 * 60 * 60 * 1000;
+/** Undelivered envelopes are dropped after this long. */
+export const MAIL_TTL = 30 * 24 * 60 * 60 * 1000;
+/** How often both runtimes run `maintain`. */
+export const MAINTENANCE_EVERY = 60 * 60 * 1000;
 const LOGIN_WINDOW = 15 * 60 * 1000;
 const LOGIN_MAX_FAILS = 10;
 
@@ -71,6 +75,8 @@ export interface RelayStore {
   inactive(before: number): string[];
   backup(handle: string): BackupRecord | undefined;
   setBackup(handle: string, record: BackupRecord): void;
+  /** Drops queued envelopes older than `before`. */
+  purgeMail(before: number): void;
 }
 
 /** One client connection, whatever the transport. */
@@ -270,4 +276,10 @@ export function purgeInactive(store: RelayStore, log: (s: string) => void = () =
     store.deleteUser(h);
     log(`expired @${h} (inactive)`);
   }
+}
+
+/** Hourly housekeeping: old mail and inactive accounts. */
+export function maintain(store: RelayStore, log: (s: string) => void = () => {}) {
+  store.purgeMail(Date.now() - MAIL_TTL);
+  purgeInactive(store, log);
 }

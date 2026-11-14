@@ -1,6 +1,6 @@
-# SHIVNEE-г GitHub болон Cloudflare руу гаргах
+# Veyra-г GitHub болон Cloudflare руу гаргах
 
-Бүх зүйл Cloudflare дээр ажиллана:
+Бүх зүйл Cloudflare дээр ажиллана. `main` руу push хийх бүрт сайт автоматаар шинэчлэгдэнэ (4-р хэсэг).
 
 ```
 Хөтөч ──https──▶ Cloudflare Worker ──▶ Static файлууд (dist/: вэб апп)
@@ -19,10 +19,8 @@
 * Cloudflare бүртгэл (үнэгүй). Durable Objects (SQLite) Workers Free төлөвлөгөөнд ажилладаг.
 * GitHub бүртгэл
 
-Шинэ хамаарал (wrangler) нэмэгдсэн тул эхлээд:
-
 ```powershell
-cd D:\Developments\E2EE_Chat
+cd D:\Websites\Veyra
 npm install
 ```
 
@@ -32,19 +30,19 @@ npm install
 npm run cf:dev
 ```
 
-`http://localhost:8787` нээгдэнэ. Энэ нь яг Cloudflare-ийн runtime (workerd) дээр ажилладаг.
+`http://localhost:8787` нээгдэнэ (wrangler-ийн порт). Энэ нь яг Cloudflare-ийн runtime (workerd) дээр ажилладаг.
 Өгөгдөл нь `.wrangler/` хавтсанд хадгалагдана (git-д орохгүй).
 
 ## 2. GitHub руу push хийх
 
-GitHub дээр **хоосон** repo үүсгэнэ (README, .gitignore, license нэмэлгүй). Жишээ нь `shivnee`.
+GitHub дээр **хоосон** repo үүсгэнэ (README, .gitignore, license нэмэлгүй). Жишээ нь `veyra`.
 
 ```powershell
-cd D:\Developments\E2EE_Chat
+cd D:\Websites\Veyra
 git init -b main
 git add .
-git commit -m "SHIVNEE: E2EE chat + Cloudflare relay"
-git remote add origin https://github.com/<ТАНЫ-НЭР>/shivnee.git
+git commit -m "Veyra: E2EE chat + Cloudflare relay"
+git remote add origin https://github.com/<ТАНЫ-НЭР>/veyra.git
 git push -u origin main
 ```
 
@@ -60,12 +58,12 @@ npm run deploy          # typecheck + build + wrangler deploy
 Дууссаны дараа `https://veyra.<таны-subdomain>.workers.dev` гэсэн хаяг гарна. Шалгах:
 
 * `https://…workers.dev/health` хаягаар `{"ok":true,...}` гарах ёстой.
-* Аппыг нээгээд шинэ identity үүсгэнэ. Апп нь ижил домэйн дээрх `/ws`-д автоматаар холбогдоно.
+* Аппыг нээгээд шинэ бүртгэл үүсгэнэ. Апп нь ижил домэйн дээрх `/ws`-д автоматаар холбогдоно.
 
 ## 4. Арга Б: GitHub-аас автоматаар байршуулах (Workers Builds)
 
 1. Cloudflare Dashboard → **Workers & Pages** → **Create** → **Import a repository**.
-2. GitHub-аа холбоод `shivnee` repo-г сонгоно.
+2. GitHub-аа холбоод `veyra` repo-г сонгоно.
 3. Тохиргоо:
    * Build command: `npm run build`
    * Deploy command: `npx wrangler deploy`
@@ -95,7 +93,7 @@ Dashboard → таны Worker → **Settings → Domains & Routes → Add → Cu
 
 ## 7. Node хувилбар хэвээр бий
 
-Cloudflare ашиглахгүй бол `npm start` нь бүгдийг нэг Node процесс дээр (порт 8787) ажиллуулна.
+Cloudflare ашиглахгүй бол `npm start` нь бүгдийг нэг Node процесс дээр (порт 8788) ажиллуулна.
 Хоёр хувилбар нэг дүрмийн кодыг (`server/relay.ts`) хуваалцдаг.
 
 ## 8. Өгөгдлийн санг цэвэрлэх (бүх бүртгэлийг устгах)
@@ -109,7 +107,7 @@ Cloudflare ашиглахгүй бол `npm start` нь бүгдийг нэг No
    ```
 2. Цэвэрлэх үедээ (PowerShell):
    ```powershell
-   curl.exe -X POST -H "Authorization: Bearer ТАНЫ-ТОКЕН" https://veyra.badamjav070.workers.dev/admin/reset
+   curl.exe -X POST -H "Authorization: Bearer ТАНЫ-ТОКЕН" https://<таны-сайт>.workers.dev/admin/reset
    ```
    `{"ok":true,"reset":true}` гарвал болсон. `/health` хаяг `"users":0` гэж харуулна.
 3. **Хөтчүүдээ ч цэвэрлэ.** Хөтөч дээр үлдсэн хуучин бүртгэл серверт холбогдоход өөрийгөө дахин

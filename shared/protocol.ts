@@ -3,6 +3,8 @@
 
 export const HANDLE_RE = /^[a-z0-9._-]{2,24}$/;
 export const MAX_BODY_CHARS = 1_000_000; // must fit in one WebSocket frame (Cloudflare: 1 MiB)
+/** Largest attachment; after encryption + base64 it still fits in one frame. */
+export const MAX_FILE_MB = 0.5;
 
 /* ------------------------------------------------------------------ Keys */
 
@@ -112,6 +114,14 @@ export interface WireFile {
   data: string; // data: URL
 }
 
+/** The message a text answers (a short snapshot of it). `who` is the original sender's handle. */
+export interface WireReply {
+  mid: string;
+  who: string;
+  text: string;
+  file?: string;
+}
+
 export interface WireGroup {
   id: string;
   name: string;
@@ -123,7 +133,8 @@ export interface WireGroup {
 
 /** Decrypted content. Nothing in here is visible to the server. */
 export type AppMessage =
-  | { k: 'text'; mid: string; text: string; at: number; timer: Timer; file?: WireFile; g?: string }
+  | { k: 'text'; mid: string; text: string; at: number; timer: Timer; file?: WireFile; g?: string; re?: WireReply }
+  | { k: 'react'; mid: string; emoji: string; g?: string } // emoji '' = reaction removed
   | { k: 'receipt'; mids: string[]; s: 'delivered' | 'read' }
   | { k: 'typing'; g?: string }
   | { k: 'timer'; timer: Timer; g?: string }

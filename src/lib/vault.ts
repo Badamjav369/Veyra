@@ -11,12 +11,14 @@
 // Locally each account is one record in localStorage (ciphertext only).
 
 import { fromB64, randomBytes, toB64, utf8 } from './crypto';
+import { storage } from './storage';
 
 const ITERATIONS = 310_000;
-const ACCOUNT_PREFIX = 'shivnee.account.';
-const INDEX_KEY = 'shivnee.accounts';
-const DEVICE_KEY = 'shivnee.device';
-const LEGACY_KEY = 'shivnee.vault.v1';
+// Domain-separation labels below are part of the key derivation: changing one makes every existing
+// password, backup and recovery code stop working.
+const ACCOUNT = (handle: string) => `account.${handle}`;
+const INDEX_KEY = 'accounts';
+const DEVICE_KEY = 'device';
 
 export interface AccountKeys {
   handle: string;
@@ -48,18 +50,18 @@ export class WrongPassphraseError extends Error {
 
 export async function deriveAccountKeys(handle: string, password: string): Promise<AccountKeys> {
   const base = await crypto.subtle.importKey('raw', utf8(password), 'PBKDF2', false, ['deriveBits']);
-  const master = await crypto.subtle.deriveBits({ name: 'PBKDF2', salt: utf8(`SHIVNEE-login-v1|${handle}`), iterations: ITERATIONS, hash: 'SHA-256' }, base, 256);
+  const master = await crypto.subtle.deriveBits({ name: 'PBKDF2', salt: utf8(`Veyra-login-v1|${handle}`), iterations: ITERATIONS, hash: 'SHA-256' }, base, 256);
   const hk = await crypto.subtle.importKey('raw', master, 'HKDF', false, ['deriveKey', 'deriveBits']);
   const salt = new Uint8Array(32);
-  const key = await crypto.subtle.deriveKey({ name: 'HKDF', hash: 'SHA-256', salt, info: utf8('SHIVNEE vault key') }, hk, { name: 'AES-GCM', length: 256 }, false, [
+  const key = await crypto.subtle.deriveKey({ name: 'HKDF', hash: 'SHA-256', salt, info: utf8('Veyra vault key') }, hk, { name: 'AES-GCM', length: 256 }, false, [
     'encrypt',
     'decrypt',
   ]);
-  const auth = await crypto.subtle.deriveBits({ name: 'HKDF', hash: 'SHA-256', salt, info: utf8('SHIVNEE login key') }, hk, 256);
+  const auth = await crypto.subtle.deriveBits({ name: 'HKDF', hash: 'SHA-256', salt, info: utf8('Veyra login key') }, hk, 256);
   return { handle, key, auth: toB64(auth) };
 }
 
-const aad = (handle: string) => utf8(`SHIVNEE-vault|${handle}`);
+const aad = (handle: string) => utf8(`Veyra-vault|${handle}`);
 
 /** Encrypts any JSON value. Output: base64(iv ‖ ciphertext). */
 export async function sealData(keys: AccountKeys, data: unknown): Promise<string> {
@@ -88,32 +90,12 @@ async function decrypt<T>(keys: AccountKeys, iv: Uint8Array<ArrayBuffer>, ct: Ui
 
 /* ------------------------------------------------------- this device */
 
-function read(key: string): string | null {
-  try {
-    return window.localStorage.getItem(key);
-  } catch {
-    return null;
-  }
-}
-
-function remove(key: string) {
-  try {
-    window.localStorage.removeItem(key);
-  } catch {
-    /* nothing to remove */
-  }
-}
-
 /** A random id for this browser, so the server can tell which device uploaded a backup. */
 export function deviceId(): string {
-  let id = read(DEVICE_KEY);
+  let id = storage.get(DEVICE_KEY);
   if (!id) {
     id = toB64(randomBytes(12)).replace(/[+/=]/g, '');
-    try {
-      window.localStorage.setItem(DEVICE_KEY, id);
-    } catch {
-      /* private mode: a new id each time is fine */
-    }
+    storage.trySet(DEVICE_KEY, id); // private mode: a new id each time is fine
   }
   return id;
 }
@@ -121,24 +103,20 @@ export function deviceId(): string {
 /** Handles that have signed in on this device, most recent first. */
 export function knownAccounts(): string[] {
   try {
-    const list = JSON.parse(read(INDEX_KEY) ?? '[]') as unknown;
-    return Array.isArray(list) ? list.filter((h): h is string => typeof h === 'string' && read(ACCOUNT_PREFIX + h) !== null) : [];
+    const list = JSON.parse(storage.get(INDEX_KEY) ?? '[]') as unknown;
+    return Array.isArray(list) ? list.filter((h): h is string => typeof h === 'string' && storage.get(ACCOUNT(h)) !== null) : [];
   } catch {
     return [];
   }
 }
 
 export function rememberAccount(handle: string) {
-  try {
-    window.localStorage.setItem(INDEX_KEY, JSON.stringify([handle, ...knownAccounts().filter((h) => h !== handle)].slice(0, 8)));
-  } catch {
-    /* ignore */
-  }
+  storage.trySet(INDEX_KEY, JSON.stringify([handle, ...knownAccounts().filter((h) => h !== handle)].slice(0, 8)));
 }
 
 function stored(handle: string): StoredAccount | null {
   try {
-    const raw = read(ACCOUNT_PREFIX + handle);
+    const raw = storage.get(ACCOUNT(handle));
     const s = raw ? (JSON.parse(raw) as StoredAccount) : null;
     return s?.v === 2 ? s : null;
   } catch {
@@ -162,7 +140,7 @@ export async function openLocal<T>(keys: AccountKeys): Promise<{ data: T; synced
 export async function saveVault(session: VaultSession, data: unknown): Promise<void> {
   const raw = fromB64(await sealData(session, data));
   const rec: StoredAccount = { v: 2, handle: session.handle, iv: toB64(raw.slice(0, 12)), ct: toB64(raw.slice(12)), savedAt: Date.now(), syncedRev: session.syncedRev };
-  window.localStorage.setItem(ACCOUNT_PREFIX + session.handle, JSON.stringify(rec));
+  storage.set(ACCOUNT(session.handle), JSON.stringify(rec));
 }
 
 /** Notes which server backup version this device's copy matches (no re-encryption needed). */
@@ -170,56 +148,13 @@ export function markSynced(session: VaultSession, rev: number) {
   session.syncedRev = rev;
   const s = stored(session.handle);
   if (!s) return;
-  try {
-    window.localStorage.setItem(ACCOUNT_PREFIX + session.handle, JSON.stringify({ ...s, syncedRev: rev }));
-  } catch {
-    /* ignore */
-  }
+  storage.trySet(ACCOUNT(session.handle), JSON.stringify({ ...s, syncedRev: rev }));
 }
 
 /** Removes this device's copy of an account (the server backup is untouched). */
 export function forgetAccount(handle: string) {
-  remove(ACCOUNT_PREFIX + handle);
-  try {
-    window.localStorage.setItem(INDEX_KEY, JSON.stringify(knownAccounts().filter((h) => h !== handle)));
-  } catch {
-    /* ignore */
-  }
-}
-
-/* ---------------------------------------- vaults from earlier versions */
-
-interface LegacyVault {
-  v: 1;
-  salt: string;
-  iv: string;
-  ct: string;
-  iter: number;
-}
-
-export function hasLegacyVault(): boolean {
-  return read(LEGACY_KEY) !== null;
-}
-
-/** Opens a vault made before sign-in existed (one per browser, own passphrase). */
-export async function openLegacyVault<T>(passphrase: string): Promise<T> {
-  const raw = read(LEGACY_KEY);
-  if (!raw) throw new Error('no legacy vault');
-  const s = JSON.parse(raw) as LegacyVault;
-  const base = await crypto.subtle.importKey('raw', utf8(passphrase), 'PBKDF2', false, ['deriveKey']);
-  const key = await crypto.subtle.deriveKey({ name: 'PBKDF2', salt: fromB64(s.salt), iterations: s.iter, hash: 'SHA-256' }, base, { name: 'AES-GCM', length: 256 }, false, [
-    'decrypt',
-  ]);
-  try {
-    const plain = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: fromB64(s.iv) }, key, fromB64(s.ct));
-    return JSON.parse(new TextDecoder().decode(plain)) as T;
-  } catch {
-    throw new WrongPassphraseError();
-  }
-}
-
-export function eraseLegacyVault() {
-  remove(LEGACY_KEY);
+  storage.remove(ACCOUNT(handle));
+  storage.trySet(INDEX_KEY, JSON.stringify(knownAccounts().filter((h) => h !== handle)));
 }
 
 /* ------------------------------------------------- data key, recovery */

@@ -5,7 +5,7 @@ interface IconProps {
   strokeWidth?: number;
 }
 
-function Svg({ size = 18, strokeWidth = 1.6, children }: IconProps & { children: ReactNode }) {
+function Svg({ size = 20, strokeWidth = 2, children }: IconProps & { children: ReactNode }) {
   return (
     <svg
       width={size}
@@ -86,6 +86,31 @@ export const ClipIcon = (p: IconProps) => (
   </Svg>
 );
 
+export const MicIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <rect x="9" y="3" width="6" height="11" rx="3" />
+    <path d="M5 11a7 7 0 0 0 14 0M12 18v3" />
+  </Svg>
+);
+
+export const StopIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <rect x="6.5" y="6.5" width="11" height="11" rx="2" fill="currentColor" />
+  </Svg>
+);
+
+export const PlayIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M8 5.5v13l11-6.5z" fill="currentColor" />
+  </Svg>
+);
+
+export const PauseIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M8 5.5v13M16 5.5v13" strokeWidth={3} />
+  </Svg>
+);
+
 export const SendIcon = (p: IconProps) => (
   <Svg strokeWidth={2} {...p}>
     <path d="M12 19V5M6 11l6-6 6 6" />
@@ -137,20 +162,6 @@ export const CloseIcon = (p: IconProps) => (
 export const BackIcon = (p: IconProps) => (
   <Svg strokeWidth={1.8} {...p}>
     <path d="M15 5l-7 7 7 7" />
-  </Svg>
-);
-
-export const PanelIcon = (p: IconProps) => (
-  <Svg {...p}>
-    <rect x="3" y="4" width="18" height="16" rx="3" />
-    <path d="M15 4v16" />
-  </Svg>
-);
-
-export const UserIcon = (p: IconProps) => (
-  <Svg {...p}>
-    <circle cx="12" cy="8" r="3.5" />
-    <path d="M5 20c1.2-3.6 4-5.5 7-5.5s5.8 1.9 7 5.5" />
   </Svg>
 );
 
@@ -224,5 +235,99 @@ export const BroomIcon = (p: IconProps) => (
   <Svg {...p}>
     <path d="M14 4l-4 8M6 13h10l1 7H5z" />
     <path d="M9 17v3M13 17v3" />
+  </Svg>
+);
+
+export const ChevronLeftIcon = (p: IconProps) => (
+  <Svg strokeWidth={2} {...p}>
+    <path d="M14.5 6l-6 6 6 6" />
+  </Svg>
+);
+
+export const ChevronRightIcon = (p: IconProps) => (
+  <Svg strokeWidth={2} {...p}>
+    <path d="M9.5 6l6 6-6 6" />
+  </Svg>
+);
+
+export const ReplyIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M9.5 6L4 11.5 9.5 17" />
+    <path d="M4.5 11.5H14a6 6 0 0 1 6 6V19" />
+  </Svg>
+);
+
+export const SmileIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <circle cx="12" cy="12" r="8.5" />
+    <path d="M8.5 14a4.2 4.2 0 0 0 7 0" />
+    <path d="M9.2 9.6h.01M14.8 9.6h.01" strokeWidth={2.4} />
+  </Svg>
+);
+
+export const ChatIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M5.5 5h13A2.5 2.5 0 0 1 21 7.5v7a2.5 2.5 0 0 1-2.5 2.5H12l-4.5 3.5V17h-2A2.5 2.5 0 0 1 3 14.5v-7A2.5 2.5 0 0 1 5.5 5Z" />
+  </Svg>
+);
+
+export const SunIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <circle cx="12" cy="12" r="4" />
+    <path d="M12 3v2M12 19v2M3 12h2M19 12h2M5.6 5.6 7 7M17 17l1.4 1.4M5.6 18.4 7 17M17 7l1.4-1.4" />
+  </Svg>
+);
+
+export const MoonIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M20 14.5A8 8 0 0 1 9.5 4 8 8 0 1 0 20 14.5z" />
+  </Svg>
+);
+
+export const MonitorIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <rect x="3" y="4" width="18" height="12" rx="2.5" />
+    <path d="M8 20h8M12 16v4" />
+  </Svg>
+);
+
+export const ShieldCheckIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M12 3l7 3v5.5c0 4.4-3 8-7 9.5-4-1.5-7-5.1-7-9.5V6Z" />
+    <path d="M9 12l2.2 2.2L15.2 10" />
+  </Svg>
+);
+
+export const PaletteIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M12 3a9 9 0 1 0 0 18c1.2 0 1.8-.8 1.8-1.7 0-.9-.6-1.3-.6-2.2 0-1 .8-1.6 1.8-1.6H17a4 4 0 0 0 4-4C21 7 17 3 12 3Z" />
+    <circle cx="7.5" cy="11" r="1" />
+    <circle cx="10" cy="7.5" r="1" />
+    <circle cx="15" cy="7.5" r="1" />
+  </Svg>
+);
+
+export const RefreshIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M20 11a8 8 0 0 0-14.5-4.5L4 8" />
+    <path d="M4 4v4h4" />
+    <path d="M4 13a8 8 0 0 0 14.5 4.5L20 16" />
+    <path d="M20 20v-4h-4" />
+  </Svg>
+);
+
+export const CogIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <circle cx="12" cy="12" r="3" />
+    <path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.3 5.3l2.1 2.1M16.6 16.6l2.1 2.1M5.3 18.7l2.1-2.1M16.6 7.4l2.1-2.1" />
+  </Svg>
+);
+
+export const GroupPlusIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <circle cx="7.5" cy="8" r="2.8" />
+    <path d="M2 19c0-3 2.4-5.2 5.5-5.2 1.5 0 2.8.5 3.8 1.4" />
+    <circle cx="14.8" cy="7.2" r="2.3" />
+    <path d="M18 12.5v7M14.5 16h7" />
   </Svg>
 );
