@@ -65,7 +65,7 @@ npm run deploy          # typecheck + build + wrangler deploy
 1. Cloudflare Dashboard → **Workers & Pages** → **Create** → **Import a repository**.
 2. GitHub-аа холбоод `veyra` repo-г сонгоно.
 3. Тохиргоо:
-   * Build command: `npm run build`
+   * **Build command: `npm run build`** (заавал бөглөнө, эс бөгөөс `dist/` үүсэхгүй тул deploy унана)
    * Deploy command: `npx wrangler deploy`
 4. Үүнээс хойш `main` руу push хийх бүрт автоматаар шинэчлэгдэнэ.
 
